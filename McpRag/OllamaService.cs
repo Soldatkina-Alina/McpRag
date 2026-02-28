@@ -76,7 +76,7 @@ public class OllamaService : IOllamaService
         _logger.LogInformation("Checking if model {ModelName} is available in Ollama", modelName);
         
         var models = await ListModelsAsync(ct);
-        return models.Any(m => m.Contains(modelName, StringComparison.OrdinalIgnoreCase));
+        return models.Any(m => m.StartsWith(modelName, StringComparison.OrdinalIgnoreCase));
     }
 }
 
