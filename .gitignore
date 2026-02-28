@@ -15,8 +15,10 @@ obj/
 *.sln.docstates
 
 # Настройки VS Code
-.vscode/
-**/.vscode/**
+.vscode/*
+!.vscode/mcp.json
+**/.vscode/*
+!**/.vscode/mcp.json
 *.code-workspace
 
 # Временные файлы
