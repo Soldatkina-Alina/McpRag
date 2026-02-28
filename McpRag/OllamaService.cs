@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -85,13 +86,18 @@ public class OllamaService : IOllamaService
 /// </summary>
 public class OllamaTagsResponse
 {
+    [JsonPropertyName("models")]
     public List<OllamaModel> Models { get; set; } = new();
 }
 
 public class OllamaModel
 {
+    [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
+    [JsonPropertyName("digest")]
     public string Digest { get; set; } = string.Empty;
-    public string Size { get; set; } = string.Empty;
+    [JsonPropertyName("size")]
+    public long Size { get; set; } = 0;
+    [JsonPropertyName("modified_at")]
     public string ModifiedAt { get; set; } = string.Empty;
 }
