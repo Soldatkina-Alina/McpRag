@@ -3,23 +3,23 @@
 # Результаты сборки
 bin/
 obj/
-out/
-publish/
+**/bin/**
+**/obj/**
 
 # Настройки Visual Studio
 .vs/
-*.user
+**/.vs/**
 *.suo
+*.user
 *.userprefs
+*.sln.docstates
 
 # Настройки VS Code
 .vscode/
+**/.vscode/**
 *.code-workspace
-
-# Логи
-*.log
-logs/
 
 # Временные файлы
 *.tmp
 *.temp
+*.log
