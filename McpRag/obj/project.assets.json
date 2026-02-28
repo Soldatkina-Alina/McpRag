@@ -5599,7 +5599,7 @@
     "version": "0.1.0-beta",
     "restore": {
       "projectUniqueName": "C:\\Users\\alink\\source\\repos\\McpRag\\McpRag\\McpRag.csproj",
-      "projectName": "SampleMcpServer",
+      "projectName": "SampleMcpServer.win-x64",
       "projectPath": "C:\\Users\\alink\\source\\repos\\McpRag\\McpRag\\McpRag.csproj",
       "packagesPath": "C:\\Users\\alink\\.nuget\\packages\\",
       "outputPath": "C:\\Users\\alink\\source\\repos\\McpRag\\McpRag\\obj\\",
