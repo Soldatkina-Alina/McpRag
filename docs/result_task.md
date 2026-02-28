@@ -128,15 +128,17 @@ npm install -g @modelcontextprotocol/inspector
 ### docs/cline_mcp_settings.json
 ```json
 {
-  "servers": {
+  "mcpServers": {
     "McpRag": {
+      "autoApprove": [],
+      "timeout": 60,
       "type": "stdio",
       "command": "dotnet",
       "args": [
-        "run",
-        "--project",
-        "McpRag"
-      ]
+        "run"
+      ],
+      "cwd": путь до файла "C:\\...\\McpRag\\McpRag",
+      "disabled": false
     }
   }
 }
