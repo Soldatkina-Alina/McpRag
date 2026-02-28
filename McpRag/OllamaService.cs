@@ -20,6 +20,7 @@ public class OllamaService : IOllamaService
     public OllamaService(HttpClient httpClient, IOptions<OllamaConfig> config, ILogger<OllamaService> logger)
     {
         _httpClient = httpClient;
+        _httpClient.BaseAddress = new Uri(config.Value.BaseUrl);
         _config = config.Value;
         _logger = logger;
     }

@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using McpRag;
 
-internal class IndexFolderTools
+public class IndexFolderTools
 {
     private readonly ILogger<IndexFolderTools> _logger;
     private readonly IIndexerService _indexerService;

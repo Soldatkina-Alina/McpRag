@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 /// Echo tool for demonstration purposes.
 /// Returns the input message prefixed with "Echo: ".
 /// </summary>
-internal class EchoTools
+public class EchoTools
 {
     private readonly ILogger<EchoTools> _logger;
 

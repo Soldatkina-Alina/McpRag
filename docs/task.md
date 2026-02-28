@@ -388,8 +388,6 @@ echo "public class Test { }" > test_docs/file2.cs
 echo "{\"name\":\"test\"}" > test_docs/config.json
 echo "Очень большой текст" > test_docs/large.txt
 
-# 2. В Cline перезапусти сервер (Restart в панели MCP)
-
 # 3. Протестируй index_folder (можно на русском)
 "Проиндексируй папку ./test_docs"
 
@@ -521,7 +519,7 @@ echo "Очень большой текст" > test_docs/large.txt
 - Обновленный IndexerConfig.cs
 - Обновленный Program.cs с регистрацией
 
-🔍 Проверки (через Cline):
+Задача 7.1. Проверки (через Cline):
 
 # 1. Подготовь тестовые файлы с разной тематикой
 echo @"
@@ -541,8 +539,6 @@ JavaScript - это язык программирования, который р
 в браузерах и на сервере (Node.js). Основной язык 
 для фронтенд-разработки.
 "@ > test_docs/javascript.txt
-
-# 2. Перезапусти сервер в Cline
 
 # 3. Проиндексируй
 "Проиндексируй папку ./test_docs"

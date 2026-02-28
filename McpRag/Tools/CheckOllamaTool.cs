@@ -5,7 +5,7 @@ using ModelContextProtocol.Server;
 
 namespace McpRag.Tools;
 
-internal class CheckOllamaTool
+public class CheckOllamaTool
 {
     private readonly IOllamaService _ollamaService;
     private readonly OllamaConfig _config;

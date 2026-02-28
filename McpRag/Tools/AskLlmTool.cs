@@ -8,7 +8,7 @@ namespace McpRag.Tools;
 /// <summary>
 /// Tool for asking questions to LLM directly.
 /// </summary>
-internal class AskLlmTool
+public class AskLlmTool
 {
     private readonly IOllamaService _ollamaService;
     private readonly OllamaConfig _config;
