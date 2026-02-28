@@ -416,192 +416,412 @@ echo "Очень большой текст" > test_docs/large.txt
  
 Задача 7: Эмбеддинги и векторный поиск в памяти
 
-✅ Что должно работать:
-- Генерация эмбеддингов через Ollama (модель nomic-embed-text)
-- Разбивка документов на чанки с перекрытием
-- Хранение векторов в памяти с метаданными
-- Поиск похожих документов по запросу (косинусное сходство)
-- Инструмент search_docs для поиска
-- Параллельная обработка для скорости
+Добавь интеграцию с настоящей векторной БД ChromaDB.
 
-📝 Промт:
+Перед началом:
 
-Добавь эмбеддинги и векторный поиск.
+1. Убедись, что Docker установлен
+2. Запусти ChromaDB в контейнере:
+   docker run -d -p 8000:8000 --name chromadb chromadb/chroma
 
-⚠️ ВАЖНО: Для эмбеддингов используется модель nomic-embed-text
-Убедись, что она установлена: ollama pull nomic-embed-text
+3. Проверь, что работает:
+   curl http://localhost:8000/api/v1/heartbeat
 
 Требования:
 
-1. Добавь в IOllamaService метод:
-   Task<float[]> GenerateEmbeddingsAsync(string text, CancellationToken ct = default)
+1. Создай интерфейс IVectorStoreService (остается как был):
+   - Task AddDocumentsAsync(IEnumerable<DocumentChunk> chunks, CancellationToken ct)
+   - Task<IEnumerable<DocumentChunk>> SearchAsync(string query, int topK, CancellationToken ct)
+   - Task ClearAsync(CancellationToken ct)
+   - Task<int> CountAsync(CancellationToken ct)
 
-2. Создай класс DocumentChunk:
+2. Создай класс DocumentChunk (остается как был):
    public class DocumentChunk
    {
        public string Id { get; set; } = Guid.NewGuid().ToString();
        public string Text { get; set; }
-       public string Source { get; set; }  // путь к файлу
+       public string Source { get; set; }
        public int ChunkIndex { get; set; }
        public float[] Embedding { get; set; }
        public DateTime IndexedAt { get; set; } = DateTime.UtcNow;
        public Dictionary<string, object> Metadata { get; set; } = new();
    }
 
-3. Создай интерфейс IVectorStoreService с методами:
-   - Task AddDocumentsAsync(IEnumerable<DocumentChunk> chunks, CancellationToken ct)
-   - Task<IEnumerable<DocumentChunk>> SearchAsync(string query, int topK = 5, CancellationToken ct)
-   - Task ClearAsync(CancellationToken ct)
-   - Task<int> CountAsync(CancellationToken ct)
+3. Установи NuGet пакет для ChromaDB:
+   dotnet add package ChromaDB.Client
 
-4. Реализуй VectorStoreService (in-memory):
-   - Хранит чанки в List<DocumentChunk> (потокобезопасно)
-   - При добавлении нормализуй эмбеддинги (делай единичную длину)
-   - При поиске:
-     * Генерируй эмбеддинг запроса
-     * Нормализуй его
-     * Считай косинусное сходство со всеми чанками
-     * Возвращай topK наиболее похожих
-   - Добавь лок для потокобезопасности
-
-5. Создай TextSplitter:
-   public class TextSplitter
+4. Реализуй ChromaDbService, который использует настоящую ChromaDB:
+   public class ChromaDbService : IVectorStoreService
    {
-       public List<string> Split(string text, int chunkSize, int chunkOverlap)
+       private readonly ChromaCollection _collection;
+       private readonly IOllamaService _ollama;
+       
+       public ChromaDbService(IOllamaService ollama)
        {
-           // Реализуй рекурсивную разбивку:
-           // 1. Сначала по параграфам (\n\n)
-           // 2. Потом по предложениям (.!?)
-           // 3. Потом по словам (пробел)
+           _ollama = ollama;
+           
+           // Подключение к ChromaDB в Docker
+           var client = new ChromaClient(new HttpClient
+           {
+               BaseAddress = new Uri("http://localhost:8000")
+           });
+           
+           // Создаем или получаем коллекцию "documents"
+           _collection = client.GetOrCreateCollectionAsync("documents").Result;
+       }
+       
+       public async Task AddDocumentsAsync(IEnumerable<DocumentChunk> chunks, CancellationToken ct)
+       {
+           var chunksList = chunks.ToList();
+           
+           // Подготовка данных для ChromaDB
+           var ids = chunksList.Select(c => c.Id).ToList();
+           var embeddings = chunksList.Select(c => c.Embedding).ToList();
+           var documents = chunksList.Select(c => c.Text).ToList();
+           
+           // Метаданные - важны для фильтрации и отображения
+           var metadatas = chunksList.Select(c => new Dictionary<string, object>
+           {
+               ["source"] = c.Source,
+               ["chunk_index"] = c.ChunkIndex,
+               ["indexed_at"] = c.IndexedAt.ToString("o"),
+               ["file_name"] = Path.GetFileName(c.Source),
+               ["extension"] = Path.GetExtension(c.Source)
+           }).ToList();
+           
+           // Добавление в ChromaDB
+           await _collection.AddAsync(
+               ids: ids,
+               embeddings: embeddings,
+               metadatas: metadatas,
+               documents: documents
+           );
+       }
+       
+       public async Task<IEnumerable<DocumentChunk>> SearchAsync(string query, int topK, CancellationToken ct)
+       {
+           // Генерируем эмбеддинг запроса
+           var queryEmbedding = await _ollama.GenerateEmbeddingsAsync(query, ct);
+           
+           // Поиск в ChromaDB
+           var results = await _collection.QueryAsync(
+               queryEmbeddings: new[] { queryEmbedding },
+               nResults: topK
+           );
+           
+           // Преобразование результатов обратно в DocumentChunk
+           return results.Select(r => new DocumentChunk
+           {
+               Id = r.Id,
+               Text = r.Document,
+               Source = r.Metadata?["source"]?.ToString(),
+               ChunkIndex = int.Parse(r.Metadata?["chunk_index"]?.ToString() ?? "0"),
+               IndexedAt = DateTime.Parse(r.Metadata?["indexed_at"]?.ToString() ?? DateTime.UtcNow.ToString()),
+               Metadata = r.Metadata?.ToDictionary(x => x.Key, x => x.Value) ?? new()
+           }).ToList();
+       }
+       
+       public async Task ClearAsync(CancellationToken ct)
+       {
+           // Удаляем все документы из коллекции
+           await _collection.DeleteAsync(new Dictionary<string, object>());
+       }
+       
+       public async Task<int> CountAsync(CancellationToken ct)
+       {
+           return await _collection.CountAsync();
        }
    }
 
-6. Обнови IndexerService:
-   - Принимай ITextSplitter и IVectorStoreService
-   - При индексации:
-     * Для каждого файла загружай содержимое (из Задачи 6)
-     * Разбивай на чанки через TextSplitter
-     * Для каждого чанка генерируй эмбеддинги (параллельно, но с ограничением)
-     * Создавай DocumentChunk с метаданными
-     * Сохраняй в векторное хранилище
-   - Добавь настройки в IndexerConfig:
-     * ChunkSize (по умолчанию 1000)
-     * ChunkOverlap (по умолчанию 200)
-     * MaxConcurrency (по умолчанию 5)
+5. Обнови IndexerService для работы с настоящим векторным хранилищем:
+   - При индексации разбивай на чанки (TextSplitter из Задачи 6)
+   - Генерируй эмбеддинги через Ollama
+   - Создавай DocumentChunk
+   - Сохраняй через ChromaDbService
 
-7. Добавь инструмент search_docs:
+6. Добавь инструмент search_docs:
    - Принимает query (string) и topK (int, default 5)
-   - Проверяет, есть ли документы в индексе
-   - Вызывает IVectorStoreService.SearchAsync
-   - Возвращает форматированный список:
-     * Релевантность в процентах
-     * Имя файла и номер чанка
-     * Фрагмент текста (первые 200 символов)
+   - Проверяет, есть ли документы (CountAsync)
+   - Вызывает SearchAsync
+   - Возвращает форматированный результат с:
+     * Имя файла, номер чанка
+     * Фрагмент текста
+     * Метаданные
 
-8. Добавь в конфигурацию:
+7. Добавь инструмент vector_store_status:
+   - Показывает статистику ChromaDB
+   - Количество документов
+   - Размер коллекции
+   - Адрес сервера
+
+8. Добавь конфигурацию в appsettings.json:
    {
      "VectorStore": {
+       "Type": "chromadb",  // chromadb или in-memory
+       "ConnectionString": "http://localhost:8000",
+       "CollectionName": "documents",
        "ChunkSize": 1000,
-       "ChunkOverlap": 200,
-       "MaxConcurrency": 5,
-       "SimilarityThreshold": 0.7
+       "ChunkOverlap": 200
      }
    }
 
 Напиши полный код:
-- DocumentChunk.cs
-- IVectorStoreService.cs
-- VectorStoreService.cs
-- ITextSplitter.cs
-- TextSplitter.cs
+- ChromaDbService.cs
 - Обновленный IndexerService.cs
 - SearchDocsTool.cs
-- Обновленный IndexerConfig.cs
+- VectorStoreStatusTool.cs
 - Обновленный Program.cs с регистрацией
+- Обновленный appsettings.json
 
-Задача 7.1. Проверки (через Cline):
+Задача 7.1 Проверка:
 
-# 1. Подготовь тестовые файлы с разной тематикой
+
+# 1. Запусти ChromaDB
+docker run -d -p 8000:8000 --name chromadb chromadb/chroma
+
+# 2. Проверь, что ChromaDB работает
+curl http://localhost:8000/api/v1/heartbeat
+
+# 3. Создай тестовые файлы
+mkdir test_docs
 echo @"
-C# - это объектно-ориентированный язык программирования, 
-разработанный компанией Microsoft для платформы .NET.
-Он сочетает мощь C++ с простотой Visual Basic.
+C# - язык программирования от Microsoft для .NET платформы.
+Поддерживает объектно-ориентированное, функциональное и асинхронное программирование.
 "@ > test_docs/csharp.txt
 
 echo @"
-Python - это интерпретируемый язык программирования 
-с динамической типизацией. Широко используется в 
-машинном обучении, анализе данных и веб-разработке.
+Python - интерпретируемый язык с динамической типизацией.
+Популярен в машинном обучении, анализе данных и веб-разработке.
 "@ > test_docs/python.txt
 
-echo @"
-JavaScript - это язык программирования, который работает 
-в браузерах и на сервере (Node.js). Основной язык 
-для фронтенд-разработки.
-"@ > test_docs/javascript.txt
+# 4. Остановись на этом пункте. Далее только ручная проверка
 
-# 3. Проиндексируй
+# 5. Проиндексируй документы
 "Проиндексируй папку ./test_docs"
 
-# 4. Тест 1: Поиск по языку Microsoft (должен найти C#)
-"Найди документы по запросу 'язык от Microsoft для .NET'"
+# 6. Проверь статус векторного хранилища
+"Покажи статус векторного хранилища"
+# Ожидаемый ответ: "ChromaDB: 2 документа, коллекция 'documents', сервер localhost:8000"
 
-# Ожидаемый результат: csharp.txt с высокой релевантностью (>80%)
+# 7. Найди документы по смыслу
+"Найди документы по запросу 'язык для машинного обучения'"
+# Ожидаемый ответ: первым должен быть python.txt
 
-# 5. Тест 2: Поиск по машинному обучению (должен найти Python)
-"Найди документы по запросу 'машинное обучение и анализ данных'"
+"Найди документы по запросу 'платформа Microsoft'"
+# Ожидаемый ответ: первым должен быть csharp.txt
 
-# Ожидаемый результат: python.txt с высокой релевантностью
+# 8. Проверь, что данные сохранились
+# Останови MCP сервер, перезапусти, и снова выполни поиск
+# Данные должны быть доступны (не пропали)
 
-# 6. Тест 3: Поиск по браузеру (должен найти JavaScript)
-"Найди документы по запросу 'язык для браузеров'"
-
-# Ожидаемый результат: javascript.txt с высокой релевантностью
-
-# 7. Тест 4: Проверка количества результатов
-"Найди 3 документа по запросу 'язык программирования'"
-
-# Ожидаемый результат: все три файла, отсортированные по релевантности
-
-# 8. Тест 5: Проверка на пустом индексе
-"Очисти индекс" (если добавил)
-"Найди документы по запросу 'тест'"
-# Ожидаемый результат: "Векторное хранилище пусто. Сначала выполните index_folder"
+# 9. Очисти хранилище (если нужно)
+"Очисти векторное хранилище"
+"Покажи статус векторного хранилища"
+# Ожидаемый ответ: 0 документов
 
 
 Задача 8: Простейший RAG (поиск + генерация)
- Что должно работать:
 
-Инструмент ask_question ищет документы и отправляет в LLM
+Задача 8: Простейший RAG (поиск + генерация)
 
-Возвращает ответ с источниками
-
-Пока без графа состояний
+✅ Что должно работать:
+- Инструмент ask_question ищет документы через ChromaDB
+- Отправляет контекст в LLM с правильным форматированием
+- Возвращает ответ с явными ссылками на источники
+- Соблюдает порог релевантности
+- Обрабатывает слишком длинный контекст
+- Понятно сообщает, если информации нет
 
 📝 Промт:
 
-text
 Реализуй простейший RAG: поиск + генерация.
 
 Требования:
-1. Добавь инструмент ask_question(question)
-2. Логика:
-   - Ищет 3 наиболее релевантных чанка через векторное хранилище
-   - Формирует промпт: "Контекст: {текст чанков}\n\nВопрос: {question}\n\nОтвет:"
-   - Отправляет в LLM через OllamaService.GenerateAsync
-   - Возвращает ответ
-3. Добавь в ответ список источников (имена файлов)
-4. Обработай случай, если документов нет
 
-Напиши код.
-Проверь на реальных вопросах по документам.
-🔍 Проверка:
+1. Добавь в конфигурацию настройки:
+   {
+     "RAG": {
+       "MaxChunks": 5,
+       "MinRelevanceScore": 0.7,
+       "MaxContextTokens": 2000,
+       "IncludeMetadataInContext": true
+     }
+   }
 
-bash
-# Проиндексировать документацию по C#
-# В Cline: "Спроси: что такое async/await?"
-# Должен ответить на основе загруженных документов
-# В ответе должны быть источники: "file1.cs, file2.md"
+2. Создай класс для форматирования контекста:
+   public class ContextFormatter
+   {
+       public string FormatContext(List<DocumentChunk> chunks, bool includeMetadata = true)
+       {
+           var sb = new StringBuilder();
+           for (int i = 0; i < chunks.Count; i++)
+           {
+               var chunk = chunks[i];
+               sb.AppendLine($"--- [Источник {i+1}]: {Path.GetFileName(chunk.Source)} ---");
+               if (includeMetadata)
+               {
+                   sb.AppendLine($"   (чанк {chunk.ChunkIndex}, релевантность: {chunk.Score:P1})");
+               }
+               sb.AppendLine(chunk.Text);
+               sb.AppendLine();
+           }
+           return sb.ToString();
+       }
+   }
+
+3. Добавь инструмент ask_question:
+   [McpServerTool]
+   public async Task<string> AskQuestion(
+       [Description("Вопрос к базе знаний")] string question,
+       [Description("Минимальная релевантность (0-1)")] double? minScore = null,
+       [Description("Максимальное количество чанков")] int? maxChunks = null,
+       CancellationToken cancellationToken = default)
+   {
+       try
+       {
+           // 1. Получаем настройки
+           var actualMinScore = minScore ?? _config.MinRelevanceScore;
+           var actualMaxChunks = maxChunks ?? _config.MaxChunks;
+           
+           // 2. Поиск релевантных чанков
+           var chunks = await _vectorStore.SearchAsync(question, actualMaxChunks, cancellationToken);
+           var chunksList = chunks.ToList();
+           
+           // 3. Проверка порога релевантности
+           var relevantChunks = chunksList
+               .Where(c => c.Score >= actualMinScore)
+               .ToList();
+           
+           if (!relevantChunks.Any())
+           {
+               return "❌ В предоставленных документах не найдено информации по вашему вопросу.\n\n" +
+                      $"Наиболее похожие документы имеют релевантность {chunksList.FirstOrDefault()?.Score:P1}, " +
+                      $"что ниже порога {actualMinScore:P1}.";
+           }
+           
+           // 4. Форматирование контекста
+           var context = _contextFormatter.FormatContext(relevantChunks);
+           
+           // 5. Формирование промпта для LLM
+           var prompt = $@"
+Ты - ассистент, который отвечает на вопросы, используя ТОЛЬКО информацию из предоставленного контекста.
+
+ВАЖНЫЕ ПРАВИЛА:
+1. Отвечай строго на основе контекста, не используй свои знания
+2. Если в контексте нет ответа - скажи, что информации нет
+3. Ссылайся на источники в формате [Источник N]
+4. Не придумывай факты и не дополняй информацию
+5. Если информация неполная - так и скажи
+
+Контекст (документы):
+{context}
+
+Вопрос пользователя: {question}
+
+Ответ (только на основе контекста, с указанием источников):";
+           
+           // 6. Отправка в LLM
+           var answer = await _ollama.GenerateAsync(prompt, cancellationToken);
+           
+           // 7. Формирование финального ответа с источниками
+           var sources = relevantChunks
+               .Select(c => Path.GetFileName(c.Source))
+               .Distinct()
+               .ToList();
+           
+           var result = new StringBuilder();
+           result.AppendLine(answer);
+           result.AppendLine();
+           result.AppendLine("---");
+           result.AppendLine("📚 **Источники:**");
+           foreach (var source in sources)
+           {
+               result.AppendLine($"- {source}");
+           }
+           result.AppendLine();
+           result.AppendLine($"*Найдено {relevantChunks.Count} релевантных чанков " +
+                            $"из {chunksList.Count} проверенных*");
+           
+           return result.ToString();
+       }
+       catch (Exception ex)
+       {
+           _logger.LogError(ex, "Ошибка при обработке вопроса");
+           return $"❌ Ошибка при обработке вопроса: {ex.Message}";
+       }
+   }
+
+4. Добавь обработку слишком длинного контекста:
+   - В методе SearchAsync передавай лимит токенов
+   - Если контекст превышает лимит - обрезай до наиболее релевантных чанков
+   - Добавь предупреждение в ответ
+
+5. Обнови IVectorStoreService.SearchAsync, чтобы возвращал Score:
+   public class SearchResult
+   {
+       public DocumentChunk Chunk { get; set; }
+       public float Score { get; set; }
+   }
+   
+   Task<List<SearchResult>> SearchWithScoreAsync(string query, int topK, CancellationToken ct);
+
+6. Добавь в ChromaDbService метод SearchWithScoreAsync:
+   - Возвращает чанки вместе с их релевантностью (distance преобразуй в score)
+
+Напиши полный код:
+- RAGConfig.cs
+- ContextFormatter.cs
+- AskQuestionTool.cs (обновленный)
+- SearchResult.cs
+- Обновленный IVectorStoreService.cs
+- Обновленный ChromaDbService.cs с SearchWithScoreAsync
+- Обновленный appsettings.json
+
+Задача 8.1 Проверка (через Cline):
+
+# 1. Подготовь тестовые документы
+echo @"
+C# поддерживает асинхронное программирование через async/await.
+Ключевое слово async указывает, что метод содержит await.
+await приостанавливает выполнение до завершения ожидаемой задачи.
+"@ > test_docs/async.txt
+
+echo @"
+LINQ (Language Integrated Query) позволяет писать декларативные запросы к коллекциям.
+Пример: var result = collection.Where(x => x > 5).Select(x => x * 2);
+LINQ работает с IEnumerable и IQueryable.
+"@ > test_docs/linq.txt
+
+echo @"
+Рекурсия - это вызов функцией самой себя.
+Важно иметь базовый случай для завершения рекурсии.
+Пример: factorial(n) = n * factorial(n-1) с base case n <= 1.
+"@ > test_docs/recursion.txt
+
+# 2. Проиндексируй
+"Проиндексируй папку ./test_docs"
+
+# 3. Тест 1: Прямой вопрос (должен найти async.txt)
+"Спроси: объясни как работает async/await в C#"
+# Ожидаемый ответ: объяснение из async.txt с ссылкой [Источник 1]
+
+# 4. Тест 2: Вопрос без точного совпадения (должен найти LINQ)
+"Спроси: как фильтровать коллекции в C#"
+# Ожидаемый ответ: про LINQ с ссылкой на linq.txt
+
+# 5. Тест 3: Вопрос без ответа
+"Спроси: что такое dependency injection"
+# Ожидаемый ответ: сообщение о том, что информации нет
+
+# 6. Тест 4: Проверка порога релевантности
+"Спроси: расскажи про рекурсию с минимальной релевантностью 0.9"
+# Ожидаемый ответ: если релевантность < 0.9, должно сказать "нет информации"
+
+# 7. Тест 5: Множественные источники
+"Спроси: расскажи про основные возможности C#"
+# Ожидаемый ответ: информация из разных файлов с разными источниками
+
+
 Задача 9: Базовая структура графа состояний
  Что должно работать:
 
