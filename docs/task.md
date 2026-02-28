@@ -56,7 +56,7 @@ text
 Требования:
 1. Создай файл .vscode/mcp.json с конфигурацией для VS Code
 
-В result_task.md папки dosc
+Создай файл в папке dosc
 1. Напиши содержимое для cline_mcp_settings.json
 2. Дай инструкцию: как добавить сервер в Cline
 
