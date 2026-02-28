@@ -1,28 +1,25 @@
-# Visual Studio Code
-.vscode/
+# .gitignore для .NET проекта
 
-# Visual Studio
+# Результаты сборки
+bin/
+obj/
+out/
+publish/
+
+# Настройки Visual Studio
 .vs/
-*.suo
 *.user
-*.userosscache
-*.sln.docstates
+*.suo
+*.userprefs
 
-# Build results
-[Dd]ebug/
-[Dd]ebugPublic/
-[Rr]elease/
-[Rr]eleases/
-x64/
-x86/
-build/
-bld/
-[Bb]in/
-[Oo]bj/
+# Настройки VS Code
+.vscode/
+*.code-workspace
 
-# NuGet packages
-*.nupkg
+# Логи
+*.log
+logs/
 
-# .NET Core
-project.lock.json
-global.json
+# Временные файлы
+*.tmp
+*.temp
