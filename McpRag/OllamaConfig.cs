@@ -9,4 +9,6 @@ public class OllamaConfig
     public string Model { get; set; } = "phi3:mini";
     public string EmbeddingModel { get; set; } = "nomic-embed-text";
     public int TimeoutSeconds { get; set; } = 30;
+    public double Temperature { get; set; } = 0.7;
+    public int MaxTokens { get; set; } = 500;
 }

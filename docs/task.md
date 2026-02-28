@@ -292,10 +292,6 @@ ollama pull nomic-embed-text
 - Обновленный OllamaConfig.cs (с новыми полями)
 
 🔍 Проверка:
-bash
-# Убедиться, что Ollama запущена и модель установлена
-ollama serve
-ollama pull phi3:mini
 
 # В Cline тест 1: простой вопрос
 # Запрос: "Спроси у LLM: что такое RAG?"

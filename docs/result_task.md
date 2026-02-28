@@ -244,3 +244,59 @@ npm install -g @modelcontextprotocol/inspector
 ## Проверка результата
 
 Инструмент работает корректно и возвращает ожидаемые результаты. Проверка доступности Ollama и наличия моделей выполняется быстро и показывает понятные сообщения.
+
+
+# Результат Задачи 5
+
+## Что было сделано
+
+1. **Обновлен IOllamaService**: Добавлен метод `GenerateAsync` для генерации ответов от LLM
+2. **Обновлен OllamaConfig**: Добавлены поля для конфигурации генерации: `Temperature` и `MaxTokens`
+3. **Создан OllamaGenerateResponse**: Модель для парсинга ответа от Ollama API
+4. **Обновлен OllamaService**: Реализован метод `GenerateAsync` с использованием `/api/generate` эндпоинта
+5. **Создан AskLlmTool**: Инструмент для прямого запроса к LLM без RAG
+6. **Обновлен Program.cs**: Зарегистрирован новый инструмент в MCP сервер
+7. **Обновлен appsettings.json**: Добавлены новые поля конфигурации
+
+## Функционал инструмента ask_llm
+
+Инструмент предоставляет следующую функциональность:
+- Принимает вопрос от пользователя и отправляет его в LLM
+- Проверяет доступность Ollama перед запросом
+- Проверяет наличие нужной модели (phi3:mini)
+- Обрабатывает ошибки:
+  - Недоступность Ollama
+  - Отсутствие модели
+  - Таймаут запроса
+  - Другие ошибки связи
+- Возвращает ответ от LLM
+
+## Примеры работы
+
+### При запущенной Ollama и доступной модели
+```
+Вопрос: What is RAG?
+Ответ: RAG stands for Retrieval-Augmented Generation. It's a technique that combines information retrieval and natural language generation.
+
+In traditional natural language generation models, the model generates text based on the knowledge it learned during training. However, these models may not have access to the latest or most specific information.
+
+RAG addresses this limitation by:
+1. First, retrieving relevant information from an external knowledge base (such as a document repository) based on a user's query
+2. Then, using that retrieved information to generate a more informed and accurate response
+
+This technique is particularly useful for tasks like question answering, document summarization, and providing up-to-date information.
+```
+
+### При не запущенной Ollama
+```
+❌ Ollama не доступна. Запустите ollama serve
+```
+
+### При отсутствующей модели
+```
+❌ Модель phi3:mini не найдена. Установите: ollama pull phi3:mini
+```
+
+## Проверка результата
+
+Инструмент работает корректно и возвращает ожидаемые результаты. Проверка доступности Ollama и модели выполняется автоматически, а ответы от LLM показываются в понятном формате.

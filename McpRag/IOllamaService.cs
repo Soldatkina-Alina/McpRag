@@ -22,4 +22,9 @@ public interface IOllamaService
     /// Checks if specific model is available.
     /// </summary>
     Task<bool> IsModelAvailableAsync(string modelName, CancellationToken ct = default);
+
+    /// <summary>
+    /// Generates a response from LLM based on prompt.
+    /// </summary>
+    Task<string> GenerateAsync(string prompt, CancellationToken ct = default);
 }

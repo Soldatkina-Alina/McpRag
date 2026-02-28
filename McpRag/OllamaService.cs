@@ -79,6 +79,67 @@ public class OllamaService : IOllamaService
         var models = await ListModelsAsync(ct);
         return models.Any(m => m.StartsWith(modelName, StringComparison.OrdinalIgnoreCase));
     }
+
+    public async Task<string> GenerateAsync(string prompt, CancellationToken ct = default)
+    {
+        _logger.LogInformation("Generating response from Ollama using model {Model}", _config.Model);
+        
+        var requestBody = new
+        {
+            model = _config.Model,
+            prompt = prompt,
+            stream = false,
+            options = new
+            {
+                temperature = _config.Temperature,
+                num_predict = _config.MaxTokens
+            }
+        };
+
+        var content = new StringContent(
+            JsonSerializer.Serialize(requestBody),
+            System.Text.Encoding.UTF8,
+            "application/json");
+
+        try
+        {
+            var response = await _httpClient.PostAsync("/api/generate", content, ct);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("Ollama generate failed: {StatusCode}", response.StatusCode);
+                throw new HttpRequestException($"Ollama API returned status code {response.StatusCode}");
+            }
+
+            var responseContent = await response.Content.ReadAsStringAsync(ct);
+            var generateResponse = JsonSerializer.Deserialize<OllamaGenerateResponse>(responseContent);
+            
+            if (!string.IsNullOrEmpty(generateResponse?.Error))
+            {
+                _logger.LogError("Ollama generate error: {Error}", generateResponse.Error);
+                throw new Exception(generateResponse.Error);
+            }
+
+            if (string.IsNullOrEmpty(generateResponse?.Response))
+            {
+                _logger.LogWarning("Ollama returned empty response");
+                return "Sorry, I didn't get a response from the model.";
+            }
+
+            _logger.LogInformation("Ollama generate succeeded, response length: {Length}", generateResponse.Response.Length);
+            return generateResponse.Response.Trim();
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("Ollama generate operation was canceled");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in Ollama generate: {Message}", ex.Message);
+            throw;
+        }
+    }
 }
 
 /// <summary>

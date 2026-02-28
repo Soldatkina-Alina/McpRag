@@ -18,7 +18,6 @@
   "tool_name": "echo", 
   "arguments": {
     "message": "Привет"
-  }
 }
 ```
 
@@ -40,6 +39,22 @@
 }
 ```
 
+### 3. ask_llm
+**Назначение**: Прямой запрос к LLM (Large Language Model)
+**Параметры**:
+- `question` (string) - вопрос для отправки в LLM
+
+**Пример использования**:
+```json
+{
+  "server_name": "McpRag",
+  "tool_name": "ask_llm",
+  "arguments": {
+    "question": "What is RAG?"
+  }
+}
+```
+
 ## Как обращаться к серверу
 
 Для использования инструментов сервера McpRag необходимо:
@@ -48,7 +63,7 @@
 
 2. **Использование инструмента `use_mcp_tool`**:
    - Укажите имя сервера: `McpRag`
-   - Выберите нужный инструмент: `echo`, `index_folder` или `check_ollama`
+   - Выберите нужный инструмент: `echo`, `index_folder`, `check_ollama` или `ask_llm`
    - Передайте соответствующие параметры в `arguments`
 
 ## Примеры успешного использования

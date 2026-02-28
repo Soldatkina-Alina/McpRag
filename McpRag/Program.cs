@@ -28,7 +28,8 @@ builder.Services
     .WithStdioServerTransport()
     .WithTools<EchoTools>()
     .WithTools<IndexFolderTools>()
-    .WithTools<CheckOllamaTool>();
+    .WithTools<CheckOllamaTool>()
+    .WithTools<AskLlmTool>();
 
 var host = builder.Build();
 
