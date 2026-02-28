@@ -120,73 +120,191 @@ echo "test" > test_docs/file2.txt
 Задача 4: Проверка связи с Ollama
  Что должно работать:
 
-Сервис для проверки доступности Ollama
-
-Инструмент check_ollama показывает статус
-
-Работает с запущенной и остановленной Ollama
-
-📝 Промт:
-
-text
 Добавь в проект проверку связи с Ollama.
 
-Требования:
-1. Создай интерфейс IOllamaService с методом: Task<bool> IsHealthyAsync()
-2. Реализуй OllamaService, который проверяет эндпоинт /api/tags
-3. Настройки: BaseUrl читать из appsettings.json (по умолчанию http://localhost:11434)
-4. Зарегистрируй сервис в DI (AddHttpClient + Singleton)
-5. Добавь инструмент check_ollama, который возвращает:
-   - "✅ Ollama доступна по адресу {url}" или
-   - "❌ Ollama не доступна. Убедитесь, что она запущена"
-6. Добавь обработку ошибок и таймаут
+ВАЖНО: Для корректной работы тебе понадобятся две разные модели Ollama:
+- Для эмбеддингов (векторный поиск): nomic-embed-text
+- Для генерации ответов: phi3:mini (или qwen2.5:7b для лучшего качества)
 
-Напиши полный код: интерфейс, реализацию, инструмент, конфигурацию.
-Проверь работу с запущенной и остановленной Ollama.
+Установи их перед началом:
+ollama pull nomic-embed-text
+ollama pull phi3:mini
+
+Требования:
+
+1. Создай интерфейс IOllamaService с методами:
+   - Task<bool> IsHealthyAsync(CancellationToken ct = default)
+   - Task<List<string>> ListModelsAsync(CancellationToken ct = default)
+   - Task<bool> IsModelAvailableAsync(string modelName, CancellationToken ct = default)
+
+2. Создай класс конфигурации OllamaConfig:
+   public class OllamaConfig
+   {
+       public string BaseUrl { get; set; } = "http://localhost:11434";
+       public string Model { get; set; } = "phi3:mini";
+       public string EmbeddingModel { get; set; } = "nomic-embed-text";
+       public int TimeoutSeconds { get; set; } = 30;
+   }
+
+3. Реализуй OllamaService, который:
+   - Проверяет эндпоинт /api/tags для проверки доступности
+   - Получает список доступных моделей через /api/tags
+   - Проверяет наличие конкретной модели по имени
+   - Использует HttpClient с таймаутом
+   - Логирует все запросы и ошибки
+
+4. Зарегистрируй сервис в DI правильно:
+   // Добавь конфигурацию
+   builder.Services.Configure<OllamaConfig>(builder.Configuration.GetSection("Ollama"));
+   
+   // Зарегистрируй HttpClient с настройками
+   builder.Services.AddHttpClient<IOllamaService, OllamaService>((sp, client) =>
+   {
+       var config = sp.GetRequiredService<IOptions<OllamaConfig>>().Value;
+       client.BaseAddress = new Uri(config.BaseUrl);
+       client.Timeout = TimeSpan.FromSeconds(config.TimeoutSeconds);
+   });
+
+5. Добавь инструмент check_ollama, который:
+   - Проверяет доступность Ollama
+   - Проверяет наличие обеих моделей (Model и EmbeddingModel из конфига)
+   - Возвращает подробный статус:
+     * "✅ Ollama доступна по адресу {url}"
+     * "📋 Доступные модели: {список}"
+     * "✅ Нужные модели установлены: phi3:mini, nomic-embed-text"
+     * ИЛИ "⚠️ Отсутствуют модели: {список_отсутствующих}. Установи: ollama pull ..."
+
+6. Добавь обработку ошибок:
+   - Таймаут - возвращать понятное сообщение
+   - Connection refused - сообщить, что Ollama не запущена
+   - Любые исключения логировать и возвращать дружелюбное сообщение
+
+7. Добавь в appsettings.json:
+   {
+     "Ollama": {
+       "BaseUrl": "http://localhost:11434",
+       "Model": "phi3:mini",
+       "EmbeddingModel": "nomic-embed-text",
+       "TimeoutSeconds": 30
+     }
+   }
+
+Напиши полный код:
+- IOllamaService.cs
+- OllamaConfig.cs
+- OllamaService.cs
+- CheckOllamaTool.cs
+- Фрагмент Program.cs с регистрацией
+- Обновленный appsettings.json
+
 🔍 Проверка:
 
-bash
 # Запустить Ollama
 ollama serve
 
+# Установить модели (если еще не)
+ollama pull phi3:mini
+ollama pull nomic-embed-text
+
 # В Cline: "Проверь доступность Ollama"
-# Должен вернуть: "✅ Ollama доступна по адресу http://localhost:11434"
+# Должен вернуть:
+# ✅ Ollama доступна по адресу http://localhost:11434
+# 📋 Доступные модели: phi3:mini, nomic-embed-text, ...
+# ✅ Нужные модели установлены: phi3:mini, nomic-embed-text
 
 # Остановить Ollama (Ctrl+C)
 # В Cline: "Проверь доступность Ollama"
-# Должен вернуть: "❌ Ollama не доступна..."
+# Должен вернуть: "❌ Ollama не доступна. Убедитесь, что она запущена"
+
 Задача 5: Простой запрос к LLM
  Что должно работать:
 
-Инструмент ask_llm отправляет вопрос в Ollama
-
-Возвращает ответ от модели
-
-Без RAG, без контекста - просто вопрос-ответ
-
-📝 Промт:
-
-text
 Добавь простой запрос к LLM без RAG.
 
+ВАЖНО: Для генерации ответов используется модель, указанная в конфигурации (по умолчанию phi3:mini).
+Модель должна быть установлена заранее: ollama pull phi3:mini
+
 Требования:
-1. Добавь в IOllamaService метод: Task<string> GenerateAsync(string prompt, CancellationToken ct)
-2. Реализуй вызов /api/generate с моделью из конфига (по умолчанию "phi3:mini")
-3. Добавь инструмент ask_llm, который принимает question (string)
-4. Инструмент отправляет вопрос в LLM и возвращает ответ
-5. БЕЗ поиска документов, БЕЗ контекста - просто вопрос к модели
-6. Добавь обработку ошибок (если Ollama не доступна)
 
-Напиши код.
-Проверь через Cline: "Спроси у LLM: что такое RAG?"
+1. Добавь в IOllamaService метод:
+   Task<string> GenerateAsync(string prompt, CancellationToken ct = default)
+
+2. Создай модели для ответа Ollama:
+   public class OllamaGenerateResponse
+   {
+       [JsonPropertyName("model")]
+       public string Model { get; set; }
+       
+       [JsonPropertyName("response")]
+       public string Response { get; set; }
+       
+       [JsonPropertyName("done")]
+       public bool Done { get; set; }
+       
+       [JsonPropertyName("error")]
+       public string Error { get; set; }
+   }
+
+3. Реализуй метод GenerateAsync:
+   - Используй эндпоинт POST /api/generate
+   - Отправляй JSON с полями:
+     {
+       "model": config.Model,
+       "prompt": prompt,
+       "stream": false,
+       "options": {
+         "temperature": 0.7,
+         "num_predict": 500
+       }
+     }
+   - Парси ответ и возвращай поле response
+   - Если пришел error - выбрасывай исключение
+
+4. Добавь в OllamaConfig новые поля (опционально):
+   public double Temperature { get; set; } = 0.7;
+   public int MaxTokens { get; set; } = 500;
+
+5. Добавь инструмент ask_llm, который:
+   - Принимает параметр question (string)
+   - Проверяет доступность Ollama через IsHealthyAsync
+   - Проверяет наличие модели через IsModelAvailableAsync
+   - Отправляет вопрос в LLM
+   - Возвращает ответ
+
+6. Обработка ошибок:
+   - Если Ollama не доступна: "❌ Ollama не доступна. Запустите ollama serve"
+   - Если модель не найдена: "❌ Модель {model} не найдена. Установите: ollama pull {model}"
+   - Если таймаут: "⏱️ Превышено время ожидания ответа от Ollama"
+   - Любые другие ошибки логировать и возвращать понятное сообщение
+
+7. Добавь поддержку отмены (CancellationToken):
+   - Передавай токен в HttpClient запросы
+   - При отмене выбрасывай OperationCanceledException
+
+8. Обнови регистрацию в DI (если нужно):
+   // Уже должно быть из Задачи 4
+
+Напиши код:
+- Обновленный IOllamaService.cs
+- Обновленный OllamaService.cs с методом GenerateAsync
+- OllamaGenerateResponse.cs
+- AskLlmTool.cs
+- Обновленный OllamaConfig.cs (с новыми полями)
+
 🔍 Проверка:
-
 bash
-# Убедиться, что Ollama запущена и есть модель
+# Убедиться, что Ollama запущена и модель установлена
+ollama serve
 ollama pull phi3:mini
 
-# В Cline: "Спроси у LLM: что такое RAG?"
-# Должен вернуть ответ от модели (любой связный текст)
+# В Cline тест 1: простой вопрос
+# Запрос: "Спроси у LLM: что такое RAG?"
+# Ожидаемый результат: связный ответ о RAG (Retrieval-Augmented Generation)
+
+# В Cline тест 2: вопрос на русском
+# Запрос: "Спроси у LLM: как работает семантический поиск?"
+# Ожидаемый результат: ответ на русском языке
+
 Задача 6: Чтение содержимого файлов
  Что должно работать:
 
