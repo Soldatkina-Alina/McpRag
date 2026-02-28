@@ -3,6 +3,14 @@
   "WorkspaceRootPath": "C:\\Users\\alink\\source\\repos\\McpRag\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{E3A91BE4-E44A-681A-6FD1-38A68B047E69}|McpRag\\McpRag.csproj|c:\\users\\alink\\source\\repos\\mcprag\\mcprag\\tools\\echotools.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{E3A91BE4-E44A-681A-6FD1-38A68B047E69}|McpRag\\McpRag.csproj|solutionrelative:mcprag\\tools\\echotools.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\alink\\source\\repos\\McpRag\\.vs\\McpRag.slnx\\v18\\DocumentLayout.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:.vs\\McpRag.slnx\\v18\\DocumentLayout.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\alink\\source\\repos\\McpRag\\docs\\task.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:docs\\task.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
     },
@@ -15,16 +23,8 @@
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:docs\\analysis.md||{EFC0BB08-EA7D-40C6-A696-C870411A895B}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\alink\\source\\repos\\McpRag\\.vs\\McpRag.slnx\\v18\\DocumentLayout.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:.vs\\McpRag.slnx\\v18\\DocumentLayout.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\alink\\source\\repos\\McpRag\\.vs\\McpRag.slnx\\config\\applicationhost.config||{FA3CD31E-987B-443A-9B81-186104E8DAC1}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:.vs\\McpRag.slnx\\config\\applicationhost.config||{FA3CD31E-987B-443A-9B81-186104E8DAC1}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{E3A91BE4-E44A-681A-6FD1-38A68B047E69}|McpRag\\McpRag.csproj|c:\\users\\alink\\source\\repos\\mcprag\\mcprag\\tools\\randomnumbertools.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{E3A91BE4-E44A-681A-6FD1-38A68B047E69}|McpRag\\McpRag.csproj|solutionrelative:mcprag\\tools\\randomnumbertools.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{E3A91BE4-E44A-681A-6FD1-38A68B047E69}|McpRag\\McpRag.csproj|c:\\users\\alink\\source\\repos\\mcprag\\mcprag\\.mcp\\server.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
@@ -71,6 +71,23 @@
             {
               "$type": "Document",
               "DocumentIndex": 0,
+              "Title": "EchoTools.cs",
+              "DocumentMoniker": "C:\\Users\\alink\\source\\repos\\McpRag\\McpRag\\Tools\\EchoTools.cs",
+              "RelativeDocumentMoniker": "McpRag\\Tools\\EchoTools.cs",
+              "ToolTip": "C:\\Users\\alink\\source\\repos\\McpRag\\McpRag\\Tools\\EchoTools.cs",
+              "RelativeToolTip": "McpRag\\Tools\\EchoTools.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-02-28T07:48:13.436Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{1c4feeaa-4718-4aa9-859d-94ce25d182ba}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
               "Title": "task.md",
               "DocumentMoniker": "C:\\Users\\alink\\source\\repos\\McpRag\\docs\\task.md",
               "RelativeDocumentMoniker": "docs\\task.md",
@@ -83,20 +100,20 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 3,
               "Title": "result_task.md",
               "DocumentMoniker": "C:\\Users\\alink\\source\\repos\\McpRag\\docs\\result_task.md",
               "RelativeDocumentMoniker": "docs\\result_task.md",
               "ToolTip": "C:\\Users\\alink\\source\\repos\\McpRag\\docs\\result_task.md",
               "RelativeToolTip": "docs\\result_task.md",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAGEAAADXAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001818|",
               "WhenOpened": "2026-02-26T04:28:52.634Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 4,
               "Title": "analysis.md",
               "DocumentMoniker": "C:\\Users\\alink\\source\\repos\\McpRag\\docs\\analysis.md",
               "RelativeDocumentMoniker": "docs\\analysis.md",
@@ -109,7 +126,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 1,
               "Title": "DocumentLayout.json",
               "DocumentMoniker": "C:\\Users\\alink\\source\\repos\\McpRag\\.vs\\McpRag.slnx\\v18\\DocumentLayout.json",
               "RelativeDocumentMoniker": ".vs\\McpRag.slnx\\v18\\DocumentLayout.json",
@@ -122,7 +139,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 5,
               "Title": "applicationhost.config",
               "DocumentMoniker": "C:\\Users\\alink\\source\\repos\\McpRag\\.vs\\McpRag.slnx\\config\\applicationhost.config",
               "RelativeDocumentMoniker": ".vs\\McpRag.slnx\\config\\applicationhost.config",
@@ -148,19 +165,6 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
-              "Title": "RandomNumberTools.cs",
-              "DocumentMoniker": "C:\\Users\\alink\\source\\repos\\McpRag\\McpRag\\Tools\\RandomNumberTools.cs",
-              "RelativeDocumentMoniker": "McpRag\\Tools\\RandomNumberTools.cs",
-              "ToolTip": "C:\\Users\\alink\\source\\repos\\McpRag\\McpRag\\Tools\\RandomNumberTools.cs",
-              "RelativeToolTip": "McpRag\\Tools\\RandomNumberTools.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-02-25T06:04:25.566Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
               "DocumentIndex": 8,
               "Title": "Program.cs",
               "DocumentMoniker": "C:\\Users\\alink\\source\\repos\\McpRag\\McpRag\\Program.cs",
@@ -171,10 +175,6 @@
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-02-25T06:04:13.54Z",
               "EditorCaption": ""
-            },
-            {
-              "$type": "Bookmark",
-              "Name": "ST:0:0:{1c4feeaa-4718-4aa9-859d-94ce25d182ba}"
             },
             {
               "$type": "Document",

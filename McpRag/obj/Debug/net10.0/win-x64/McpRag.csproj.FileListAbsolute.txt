@@ -233,3 +233,4 @@ C:\Users\alink\source\repos\McpRag\McpRag\obj\Debug\net10.0\win-x64\refint\McpRa
 C:\Users\alink\source\repos\McpRag\McpRag\obj\Debug\net10.0\win-x64\McpRag.pdb
 C:\Users\alink\source\repos\McpRag\McpRag\obj\Debug\net10.0\win-x64\McpRag.genruntimeconfig.cache
 C:\Users\alink\source\repos\McpRag\McpRag\obj\Debug\net10.0\win-x64\ref\McpRag.dll
+C:\Users\alink\source\repos\McpRag\McpRag\obj\Debug\net10.0\win-x64\McpRag.sourcelink.json
