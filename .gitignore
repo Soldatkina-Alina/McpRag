@@ -1,2 +1,28 @@
-".vs/" 
-/.vs/McpRag.slnx/FileContentIndex/4c5abd30-a858-4774-af23-62e16e72630a.vsidx
+# Visual Studio Code
+.vscode/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+build/
+bld/
+[Bb]in/
+[Oo]bj/
+
+# NuGet packages
+*.nupkg
+
+# .NET Core
+project.lock.json
+global.json
