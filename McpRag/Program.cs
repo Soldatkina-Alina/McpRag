@@ -1,18 +1,34 @@
+using McpRag;
+using McpRag.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using System.Net.Http;
 
 var builder = Host.CreateApplicationBuilder(args);
 
 // Configure all logs to go to stderr (stdout is used for the MCP protocol messages).
 builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 
+// Add configuration
+builder.Services.Configure<OllamaConfig>(builder.Configuration.GetSection("Ollama"));
+
+// Add HttpClient with configuration
+builder.Services.AddHttpClient<IOllamaService, OllamaService>((sp, client) =>
+{
+    var config = sp.GetRequiredService<IOptions<OllamaConfig>>().Value;
+    client.BaseAddress = new Uri(config.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(config.TimeoutSeconds);
+});
+
 // Add the MCP services: the transport to use (stdio) and the tools to register.
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
     .WithTools<EchoTools>()
-    .WithTools<IndexFolderTools>();
+    .WithTools<IndexFolderTools>()
+    .WithTools<CheckOllamaTool>();
 
 var host = builder.Build();
 

@@ -32,8 +32,16 @@
     <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
+  <!-- Copy appsettings.json to output directory -->
+  <ItemGroup>
+    <Content Include="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.0" />
     <PackageReference Include="ModelContextProtocol" Version="0.7.0-preview.1" />
   </ItemGroup>
 

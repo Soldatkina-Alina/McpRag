@@ -126,7 +126,7 @@ echo "test" > test_docs/file2.txt
 - Для эмбеддингов (векторный поиск): nomic-embed-text
 - Для генерации ответов: phi3:mini (или qwen2.5:7b для лучшего качества)
 
-Установи их перед началом:
+Проверь, что они установлены. Если нет, то установи их перед началом:
 ollama pull nomic-embed-text
 ollama pull phi3:mini
 
