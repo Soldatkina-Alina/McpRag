@@ -13,6 +13,7 @@ builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 
 // Add configuration
 builder.Services.Configure<OllamaConfig>(builder.Configuration.GetSection("Ollama"));
+builder.Services.Configure<IndexerConfig>(builder.Configuration.GetSection("Indexer"));
 
 // Add HttpClient with configuration
 builder.Services.AddHttpClient<IOllamaService, OllamaService>((sp, client) =>
@@ -22,6 +23,9 @@ builder.Services.AddHttpClient<IOllamaService, OllamaService>((sp, client) =>
     client.Timeout = TimeSpan.FromSeconds(config.TimeoutSeconds);
 });
 
+// Add indexer service
+builder.Services.AddSingleton<IIndexerService, IndexerService>();
+
 // Add the MCP services: the transport to use (stdio) and the tools to register.
 builder.Services
     .AddMcpServer()
@@ -29,7 +33,8 @@ builder.Services
     .WithTools<EchoTools>()
     .WithTools<IndexFolderTools>()
     .WithTools<CheckOllamaTool>()
-    .WithTools<AskLlmTool>();
+    .WithTools<AskLlmTool>()
+    .WithTools<ListFilesTool>();
 
 var host = builder.Build();
 

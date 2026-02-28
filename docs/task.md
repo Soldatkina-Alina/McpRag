@@ -117,7 +117,7 @@ echo "test" > test_docs/file2.txt
 # Должен вернуть: "Найдено 0 файлов в папке ./test_docs"
 
 
-Задача 4: Проверка связи с Ollama
+✅Задача 4: Проверка связи с Ollama
  Что должно работать:
 
 Добавь в проект проверку связи с Ollama.
@@ -216,7 +216,7 @@ ollama pull nomic-embed-text
 # В Cline: "Проверь доступность Ollama"
 # Должен вернуть: "❌ Ollama не доступна. Убедитесь, что она запущена"
 
-Задача 5: Простой запрос к LLM
+✅Задача 5: Простой запрос к LLM
  Что должно работать:
 
 Добавь простой запрос к LLM без RAG.
@@ -303,84 +303,276 @@ ollama pull nomic-embed-text
 
 Задача 6: Чтение содержимого файлов
  Что должно работать:
-
-index_folder теперь читает содержимое файлов
-
-Сохраняет текст в память (List<string>)
-
-Инструмент list_files показывает загруженное
-
-Пока без эмбеддингов
+- index_folder теперь читает содержимое файлов
+- Сохраняет текст в память (List<FileContent>)
+- Инструмент list_files показывает загруженное
+- Пока без эмбеддингов
+- Поддержка разных кодировок
+- Фильтрация по расширениям из конфига
 
 📝 Промт:
 
-text
 Улучши IndexFolderTool - добавь чтение содержимого файлов.
 
 Требования:
-1. Создай интерфейс IIndexerService с методом: Task<List<FileContent>> LoadFilesAsync(string folderPath, string pattern)
-   где FileContent: { string Path, string Content, long Size }
-2. Реализуй чтение всех текстовых файлов (.txt, .md, .cs, .json - все что можно прочесть как текст)
-3. Содержимое сохраняй в памяти (просто список в поле класса)
-4. Инструмент index_folder возвращает: "Загружено X файлов, общий размер Y символов"
-5. Добавь тестовый инструмент list_files для просмотра загруженного (возвращает имена файлов)
-6. Добавь очистку при новой индексации
 
-Напиши код.
-Проверь загрузку разных файлов.
-🔍 Проверка:
+1. Создай интерфейс IIndexerService с методом:
+   Task<List<FileContent>> LoadFilesAsync(string folderPath, string pattern, CancellationToken ct)
 
-bash
-# Создать тестовые файлы
+2. Создай класс FileContent:
+   public class FileContent
+   {
+       public string Path { get; set; }
+       public string FileName { get; set; }
+       public string Extension { get; set; }
+       public string Content { get; set; }
+       public long Size { get; set; }
+       public DateTime LastModified { get; set; }
+   }
+
+3. Добавь конфигурацию IndexerConfig:
+   public class IndexerConfig
+   {
+       public List<string> SupportedExtensions { get; set; } = 
+           new List<string> { ".txt", ".md", ".cs", ".js", ".ts", ".json", ".yaml", ".rst" };
+       public int MaxFileSizeMB { get; set; } = 10;
+       public bool SkipLockedFiles { get; set; } = true;
+   }
+
+4. Реализуй IndexerService:
+   - Рекурсивно обходит все файлы по паттерну
+   - Фильтрует по расширениям из конфига
+   - Проверяет размер файла (не больше MaxFileSizeMB)
+   - Читает содержимое в UTF-8 кодировке
+   - Обрабатывает исключения (FileNotFoundException, UnauthorizedAccessException)
+   - Сохраняет метаданные (размер, дата изменения)
+   - Хранит список в памяти (с очисткой при новой индексации)
+
+5. Добавь инструмент index_folder:
+   - Принимает folderPath и pattern
+   - Вызывает LoadFilesAsync
+   - Возвращает: "Загружено {count} файлов, общий размер {totalSize} символов"
+   - Если файлы пропущены (слишком большие/заблокированные) - сообщить об этом
+
+6. Добавь инструмент list_files:
+   - Принимает опциональный параметр extension для фильтрации
+   - Возвращает список файлов с их размером и датой изменения
+   - Формат: "file1.txt (1.2 KB, 2024-01-01), file2.cs (3.5 KB, 2024-01-02)"
+
+7. Добавь очистку при новой индексации:
+   - При вызове index_folder старые данные удаляются
+   - list_files показывает только текущие загруженные файлы
+
+8. Добавь обработку ошибок:
+   - Если папка не существует: "Ошибка: папка {folderPath} не найдена"
+   - Если нет файлов по паттерну: "Не найдено файлов, соответствующих паттерну {pattern}"
+   - Если файлы пропущены: "Загружено {count} файлов. Пропущено {skipped} (слишком большие/заблокированные)"
+
+Напиши полный код:
+- IIndexerService.cs
+- FileContent.cs
+- IndexerConfig.cs
+- IndexerService.cs
+- IndexFolderTool.cs (обновленный)
+- ListFilesTool.cs (новый)
+- Обновленный Program.cs с регистрацией
+- Обновленный appsettings.json
+
+Задача 6.1.
+🔍 Проверки (через Cline, НЕ через терминал):
+
+# 1. Создай тестовые файлы (в терминале, не в Cline)
+mkdir test_docs
 echo "Содержимое файла 1" > test_docs/file1.txt
 echo "public class Test { }" > test_docs/file2.cs
+echo "{\"name\":\"test\"}" > test_docs/config.json
+echo "Очень большой текст" > test_docs/large.txt
 
-# В Cline: "Проиндексируй папку ./test_docs"
-# Должен вернуть: "Загружено 2 файлов, общий размер 50 символов"
+# 2. В Cline перезапусти сервер (Restart в панели MCP)
 
-# В Cline: "Покажи загруженные файлы"
-# Должен вернуть: "file1.txt, file2.cs"
+# 3. Протестируй index_folder (можно на русском)
+"Проиндексируй папку ./test_docs"
+
+# Ожидаемый ответ:
+# "Загружено 4 файлов, общий размер 150 символов"
+
+# 4. Проверь список файлов
+"Покажи загруженные файлы"
+
+# Ожидаемый ответ:
+# "file1.txt (1.2 KB, 2024-01-01), file2.cs (0.5 KB, 2024-01-01), config.json (0.3 KB, 2024-01-01), large.txt (2.1 KB, 2024-01-01)"
+
+# 5. Проверь фильтрацию по расширению
+"Покажи только .txt файлы"
+
+# 6. Проверь повторную индексацию (должна очистить старые данные)
+"Проиндексируй папку ./test_docs с паттерном *.txt"
+"Покажи загруженные файлы"  # должны быть только .txt файлы
+
+# 7. Проверь обработку ошибок
+"Проиндексируй папку ./несуществующая_папка"
+# Ожидаемый ответ: "Ошибка: папка ./несуществующая_папка не найдена"
+
+
 Задача 7: Эмбеддинги и векторный поиск в памяти
- Что должно работать:
+ 
+Задача 7: Эмбеддинги и векторный поиск в памяти
 
-Генерация эмбеддингов через Ollama
-
-Хранение векторов в памяти
-
-Поиск похожих документов по запросу
-
-Инструмент search_docs для поиска
+✅ Что должно работать:
+- Генерация эмбеддингов через Ollama (модель nomic-embed-text)
+- Разбивка документов на чанки с перекрытием
+- Хранение векторов в памяти с метаданными
+- Поиск похожих документов по запросу (косинусное сходство)
+- Инструмент search_docs для поиска
+- Параллельная обработка для скорости
 
 📝 Промт:
 
-text
 Добавь эмбеддинги и векторный поиск.
 
+⚠️ ВАЖНО: Для эмбеддингов используется модель nomic-embed-text
+Убедись, что она установлена: ollama pull nomic-embed-text
+
 Требования:
-1. Добавь в IOllamaService метод: Task<float[]> GenerateEmbeddingsAsync(string text, CancellationToken ct)
-2. Создай интерфейс IVectorStoreService с методами:
-   - Task AddDocumentsAsync(IEnumerable<DocumentChunk> chunks)
-   - Task<IEnumerable<DocumentChunk>> SearchAsync(string query, int topK)
-   - Task ClearAsync()
-3. Создай класс DocumentChunk: { Id, Text, Source, Embedding, IndexedAt }
-4. Реализуй ChromaDbService (in-memory):
-   - Хранит чанки в List<DocumentChunk>
-   - При поиске генерирует эмбеддинг запроса
-   - Считает косинусное сходство
-5. При index_folder теперь:
-   - Разбивай файлы на чанки (просто по 1000 символов пока)
-   - Генерируй эмбеддинги для каждого чанка
-   - Сохраняй в векторное хранилище
-6. Добавь инструмент search_docs(query, topK=5) для поиска
 
-Напиши код.
-Проверь поиск: найди документы по смыслу.
-🔍 Проверка:
+1. Добавь в IOllamaService метод:
+   Task<float[]> GenerateEmbeddingsAsync(string text, CancellationToken ct = default)
 
-bash
-# Проиндексировать папку с документами
-# В Cline: "Найди документы по запросу 'программирование'"
-# Должен вернуть список похожих документов с фрагментами
+2. Создай класс DocumentChunk:
+   public class DocumentChunk
+   {
+       public string Id { get; set; } = Guid.NewGuid().ToString();
+       public string Text { get; set; }
+       public string Source { get; set; }  // путь к файлу
+       public int ChunkIndex { get; set; }
+       public float[] Embedding { get; set; }
+       public DateTime IndexedAt { get; set; } = DateTime.UtcNow;
+       public Dictionary<string, object> Metadata { get; set; } = new();
+   }
+
+3. Создай интерфейс IVectorStoreService с методами:
+   - Task AddDocumentsAsync(IEnumerable<DocumentChunk> chunks, CancellationToken ct)
+   - Task<IEnumerable<DocumentChunk>> SearchAsync(string query, int topK = 5, CancellationToken ct)
+   - Task ClearAsync(CancellationToken ct)
+   - Task<int> CountAsync(CancellationToken ct)
+
+4. Реализуй VectorStoreService (in-memory):
+   - Хранит чанки в List<DocumentChunk> (потокобезопасно)
+   - При добавлении нормализуй эмбеддинги (делай единичную длину)
+   - При поиске:
+     * Генерируй эмбеддинг запроса
+     * Нормализуй его
+     * Считай косинусное сходство со всеми чанками
+     * Возвращай topK наиболее похожих
+   - Добавь лок для потокобезопасности
+
+5. Создай TextSplitter:
+   public class TextSplitter
+   {
+       public List<string> Split(string text, int chunkSize, int chunkOverlap)
+       {
+           // Реализуй рекурсивную разбивку:
+           // 1. Сначала по параграфам (\n\n)
+           // 2. Потом по предложениям (.!?)
+           // 3. Потом по словам (пробел)
+       }
+   }
+
+6. Обнови IndexerService:
+   - Принимай ITextSplitter и IVectorStoreService
+   - При индексации:
+     * Для каждого файла загружай содержимое (из Задачи 6)
+     * Разбивай на чанки через TextSplitter
+     * Для каждого чанка генерируй эмбеддинги (параллельно, но с ограничением)
+     * Создавай DocumentChunk с метаданными
+     * Сохраняй в векторное хранилище
+   - Добавь настройки в IndexerConfig:
+     * ChunkSize (по умолчанию 1000)
+     * ChunkOverlap (по умолчанию 200)
+     * MaxConcurrency (по умолчанию 5)
+
+7. Добавь инструмент search_docs:
+   - Принимает query (string) и topK (int, default 5)
+   - Проверяет, есть ли документы в индексе
+   - Вызывает IVectorStoreService.SearchAsync
+   - Возвращает форматированный список:
+     * Релевантность в процентах
+     * Имя файла и номер чанка
+     * Фрагмент текста (первые 200 символов)
+
+8. Добавь в конфигурацию:
+   {
+     "VectorStore": {
+       "ChunkSize": 1000,
+       "ChunkOverlap": 200,
+       "MaxConcurrency": 5,
+       "SimilarityThreshold": 0.7
+     }
+   }
+
+Напиши полный код:
+- DocumentChunk.cs
+- IVectorStoreService.cs
+- VectorStoreService.cs
+- ITextSplitter.cs
+- TextSplitter.cs
+- Обновленный IndexerService.cs
+- SearchDocsTool.cs
+- Обновленный IndexerConfig.cs
+- Обновленный Program.cs с регистрацией
+
+🔍 Проверки (через Cline):
+
+# 1. Подготовь тестовые файлы с разной тематикой
+echo @"
+C# - это объектно-ориентированный язык программирования, 
+разработанный компанией Microsoft для платформы .NET.
+Он сочетает мощь C++ с простотой Visual Basic.
+"@ > test_docs/csharp.txt
+
+echo @"
+Python - это интерпретируемый язык программирования 
+с динамической типизацией. Широко используется в 
+машинном обучении, анализе данных и веб-разработке.
+"@ > test_docs/python.txt
+
+echo @"
+JavaScript - это язык программирования, который работает 
+в браузерах и на сервере (Node.js). Основной язык 
+для фронтенд-разработки.
+"@ > test_docs/javascript.txt
+
+# 2. Перезапусти сервер в Cline
+
+# 3. Проиндексируй
+"Проиндексируй папку ./test_docs"
+
+# 4. Тест 1: Поиск по языку Microsoft (должен найти C#)
+"Найди документы по запросу 'язык от Microsoft для .NET'"
+
+# Ожидаемый результат: csharp.txt с высокой релевантностью (>80%)
+
+# 5. Тест 2: Поиск по машинному обучению (должен найти Python)
+"Найди документы по запросу 'машинное обучение и анализ данных'"
+
+# Ожидаемый результат: python.txt с высокой релевантностью
+
+# 6. Тест 3: Поиск по браузеру (должен найти JavaScript)
+"Найди документы по запросу 'язык для браузеров'"
+
+# Ожидаемый результат: javascript.txt с высокой релевантностью
+
+# 7. Тест 4: Проверка количества результатов
+"Найди 3 документа по запросу 'язык программирования'"
+
+# Ожидаемый результат: все три файла, отсортированные по релевантности
+
+# 8. Тест 5: Проверка на пустом индексе
+"Очисти индекс" (если добавил)
+"Найди документы по запросу 'тест'"
+# Ожидаемый результат: "Векторное хранилище пусто. Сначала выполните index_folder"
+
+
 Задача 8: Простейший RAG (поиск + генерация)
  Что должно работать:
 

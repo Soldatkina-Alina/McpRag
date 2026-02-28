@@ -1,19 +1,24 @@
 using System.ComponentModel;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
+using System.Threading;
+using System.Threading.Tasks;
+using McpRag;
 
 internal class IndexFolderTools
 {
     private readonly ILogger<IndexFolderTools> _logger;
+    private readonly IIndexerService _indexerService;
 
-    public IndexFolderTools(ILogger<IndexFolderTools> logger)
+    public IndexFolderTools(ILogger<IndexFolderTools> logger, IIndexerService indexerService)
     {
         _logger = logger;
+        _indexerService = indexerService;
     }
 
     [McpServerTool]
     [Description("Counts the number of files in a specified folder that match a given pattern.")]
-    public string IndexFolder(
+    public async Task<string> IndexFolder(
         [Description("Path to the folder to search")] string folderPath,
         [Description("File search pattern (default: *.*)")] string pattern = "*.*")
     {
@@ -22,20 +27,28 @@ internal class IndexFolderTools
         if (!Directory.Exists(folderPath))
         {
             _logger.LogError("Folder not found: {FolderPath}", folderPath);
-            return $"Error: Folder '{folderPath}' not found";
+            return $"Ошибка: папка '{folderPath}' не найдена";
         }
 
         try
         {
-            var files = Directory.GetFiles(folderPath, pattern, SearchOption.TopDirectoryOnly);
-            _logger.LogInformation("Found {FileCount} files in folder {FolderPath} matching pattern {Pattern}", files.Length, folderPath, pattern);
+            var files = await _indexerService.LoadFilesAsync(folderPath, pattern, CancellationToken.None);
+            
+            if (files.Count == 0)
+            {
+                _logger.LogInformation("No files found in folder {FolderPath} matching pattern {Pattern}", folderPath, pattern);
+                return $"Не найдено файлов, соответствующих паттерну {pattern}";
+            }
 
-            return $"Найдено {files.Length} файлов в папке {folderPath}";
+            var totalSize = files.Sum(f => f.Size);
+            _logger.LogInformation("Loaded {FileCount} files in folder {FolderPath} matching pattern {Pattern}, total size {TotalSize} characters", files.Count, folderPath, pattern, totalSize);
+
+            return $"Загружено {files.Count} файлов, общий размер {totalSize} символов";
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error when indexing folder {FolderPath}: {Message}", folderPath, ex.Message);
-            return $"Error: {ex.Message}";
+            return $"Ошибка: {ex.Message}";
         }
     }
 }
