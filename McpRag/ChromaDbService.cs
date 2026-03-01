@@ -112,7 +112,7 @@ public class ChromaDbService : IVectorStoreService
                 Id = results.Ids[i],
                 Text = results.Documents[i],
                 Source = metadata?["source"]?.ToString(),
-                ChunkIndex = Convert.ToInt32(metadata?["chunk_index"] ?? "0"),
+                ChunkIndex = metadata?["chunk_index"] != null ? int.Parse(metadata["chunk_index"].ToString()) : 0,
                 IndexedAt = DateTime.Parse(metadata?["indexed_at"]?.ToString() ?? DateTime.UtcNow.ToString()),
                 Metadata = metadata?.ToDictionary(x => x.Key, x => x.Value) ?? new()
             });

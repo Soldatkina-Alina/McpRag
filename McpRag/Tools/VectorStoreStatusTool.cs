@@ -9,7 +9,7 @@ namespace McpRag.Tools;
 /// <summary>
 /// Tool for checking vector store status.
 /// </summary>
-internal class VectorStoreStatusTool
+public class VectorStoreStatusTool
 {
     private readonly IVectorStoreService _vectorStore;
     private readonly ILogger<VectorStoreStatusTool> _logger;

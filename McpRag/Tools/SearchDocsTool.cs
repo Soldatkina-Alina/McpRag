@@ -9,7 +9,7 @@ namespace McpRag.Tools;
 /// <summary>
 /// Tool for searching relevant document chunks.
 /// </summary>
-internal class SearchDocsTool
+public class SearchDocsTool
 {
     private readonly IVectorStoreService _vectorStore;
     private readonly ILogger<SearchDocsTool> _logger;
@@ -30,6 +30,12 @@ internal class SearchDocsTool
         try
         {
             _logger.LogInformation("Searching for relevant documents with query: {Query}, topK: {TopK}", query, topK);
+
+            // Validate topK value
+            if (topK <= 0)
+            {
+                topK = 5;
+            }
 
             var count = await _vectorStore.CountAsync(cancellationToken);
             if (count == 0)

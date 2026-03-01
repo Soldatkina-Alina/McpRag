@@ -1,6 +1,7 @@
 using McpRag;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Moq;
 using System;
 using System.IO;
 using System.Linq;
@@ -18,7 +19,9 @@ public class IndexerServiceTests
         // Arrange
         var config = Options.Create(new IndexerConfig());
         var logger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<IndexerService>();
-        var indexerService = new IndexerService(config, logger);
+        var vectorStoreMock = new Mock<IVectorStoreService>();
+        var ollamaMock = new Mock<IOllamaService>();
+        var indexerService = new IndexerService(config, vectorStoreMock.Object, ollamaMock.Object, logger);
         var testFolder = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "test_docs");
 
         // Act
@@ -35,7 +38,9 @@ public class IndexerServiceTests
         // Arrange
         var config = Options.Create(new IndexerConfig());
         var logger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<IndexerService>();
-        var indexerService = new IndexerService(config, logger);
+        var vectorStoreMock = new Mock<IVectorStoreService>();
+        var ollamaMock = new Mock<IOllamaService>();
+        var indexerService = new IndexerService(config, vectorStoreMock.Object, ollamaMock.Object, logger);
         var testFolder = "non_existent_folder";
 
         // Act
@@ -52,7 +57,9 @@ public class IndexerServiceTests
         // Arrange
         var config = Options.Create(new IndexerConfig());
         var logger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<IndexerService>();
-        var indexerService = new IndexerService(config, logger);
+        var vectorStoreMock = new Mock<IVectorStoreService>();
+        var ollamaMock = new Mock<IOllamaService>();
+        var indexerService = new IndexerService(config, vectorStoreMock.Object, ollamaMock.Object, logger);
         var testFolder = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "test_docs");
 
         // Act
@@ -70,7 +77,9 @@ public class IndexerServiceTests
         // Arrange
         var config = Options.Create(new IndexerConfig());
         var logger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<IndexerService>();
-        var indexerService = new IndexerService(config, logger);
+        var vectorStoreMock = new Mock<IVectorStoreService>();
+        var ollamaMock = new Mock<IOllamaService>();
+        var indexerService = new IndexerService(config, vectorStoreMock.Object, ollamaMock.Object, logger);
         var testFolder = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "test_docs");
         await indexerService.LoadFilesAsync(testFolder, "*.*", CancellationToken.None);
 
@@ -88,7 +97,9 @@ public class IndexerServiceTests
         // Arrange
         var config = Options.Create(new IndexerConfig());
         var logger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<IndexerService>();
-        var indexerService = new IndexerService(config, logger);
+        var vectorStoreMock = new Mock<IVectorStoreService>();
+        var ollamaMock = new Mock<IOllamaService>();
+        var indexerService = new IndexerService(config, vectorStoreMock.Object, ollamaMock.Object, logger);
         var testFolder = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "test_docs");
         await indexerService.LoadFilesAsync(testFolder, "*.*", CancellationToken.None);
 
