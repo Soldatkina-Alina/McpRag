@@ -351,4 +351,151 @@ This technique is particularly useful for tasks like question answering, documen
 
 ## Проверка результата
 
-Сборка проекта проходит успешно. Инструменты index_folder и list_files работают вместе, позволяя загружать и просматривать содержимое файлов.
+Сборка проекта проходит успешно. Инструменты index_folder и list_files работают вместе, позволяя загружать и пр
+
+# Результат Задачи 7
+
+## Что было сделано
+
+1. **Созданы новые файлы**:
+   - `IVectorStoreService.cs` - интерфейс для работы с векторным хранилищем
+   - `DocumentChunk.cs` - модель для хранения информации о чанке документа с эмбеддингом
+   - `ChromaDbService.cs` - реализация IVectorStoreService для ChromaDB с использованием HTTP API
+   - `OllamaTagsResponse.cs` - модель для разбора ответа API Ollama о доступных моделях
+   - `ChromaSearchResponse.cs`, `ChromaSearchResult.cs`, `ChromaCountResponse.cs` - модели для разбора ответов API ChromaDB
+
+2. **Обновлены существующие файлы**:
+   - `IOllamaService.cs` - добавлен метод `GenerateEmbeddingsAsync` для генерации эмбеддингов
+   - `OllamaService.cs` - реализация метода генерации эмбеддингов через API Ollama /api/embeddings
+   - `OllamaEmbeddingResponse.cs` - модель для разбора ответа API Ollama о эмбеддингах
+   - `appsettings.json` - добавлены конфигурационные параметры для vector store
+   - `IndexerService.cs` - обновлен для обработки и индексации содержимого файлов в ChromaDB
+   - `VectorStoreStatusTool.cs` - новый инструмент для проверки статуса vector store
+   - `Program.cs` - добавлена регистрация сервисов для vector store в DI
+
+3. **Добавлены новые инструменты MCP**:
+   - `SearchDocsTool` - инструмент для поиска релевантных документов по запросу
+   - `VectorStoreStatusTool` - инструмент для проверки статуса vector store и его очистки
+
+## Функциональность
+
+### SearchDocsTool
+Инструмент для поиска релевантных документов в ChromaDB по текстовому запросу. Принимает:
+- `query` - строка запроса
+- `topK` - количество возвращаемых результатов (по умолчанию 5)
+
+Возвращает форматированный список найденных документов с указанием источника и фрагмента текста.
+
+### VectorStoreStatusTool
+Инструмент для проверки статуса vector store и его очистки. Доступны два метода:
+- `VectorStoreStatus` - возвращает информацию о состоянии vector store (коллекция, сервер, количество документов)
+- `ClearVectorStore` - очищает все документы из vector store
+
+### IndexerService
+Обновлен для:
+1. Чтения содержимого файлов из указанной папки
+2. Разбития текста на чанки для векторизации
+3. Генерации эмбеддингов для каждого чанка с помощью Ollama
+4. Сохранения чанков в ChromaDB с метаданными
+
+## Настройки конфигурации
+
+В `appsettings.json` добавлены следующие параметры:
+
+```json
+"VectorStore": {
+  "Type": "chromadb",
+  "ConnectionString": "http://localhost:8000",
+  "CollectionName": "documents",
+  "ChunkSize": 1000,
+  "ChunkOverlap": 200
+}
+```
+
+- `Type` - тип vector store (chromadb)
+- `ConnectionString` - URL подключения к ChromaDB
+- `CollectionName` - имя коллекции для хранения документов
+- `ChunkSize` - размер чанка текста в символах
+- `ChunkOverlap` - перекрытие между чанками
+
+## Проверка работы
+
+### Запуск сервисов
+Для работы MCP сервера с ChromaDB нужно запустить ChromaDB:
+
+```bash
+# Запустить ChromaDB в Docker
+docker run -d -p 8000:8000 --name chromadb chromadb/chroma
+
+# Проверить подключение
+curl http://localhost:8000/api/v1/collections
+```
+
+### Запуск MCP сервера
+```bash
+cd McpRag
+dotnet run
+```
+
+### Тестирование с помощью Cline
+После запуска сервера можно тестировать через Cline:
+1. Подключите MCP сервер к Cline
+2. Используйте инструменты:
+   - Для проверки статуса: `Вызови инструмент vector_store_status`
+   - Для поиска документов: `Вызови инструмент search_docs с query "тема документа"`
+   - Для индексации папки: `Вызови инструмент index_folder с folderPath "./test_docs"`
+
+## Примеры использования
+
+### Проверка статуса vector store
+```json
+{
+  "server_name": "McpRag",
+  "tool_name": "vector_store_status",
+  "arguments": {}
+}
+```
+Результат:
+```
+✅ Vector store status:
+- Type: chromadb
+- Server: http://localhost:8000
+- Collection: documents
+- Documents: 0
+```
+
+### Индексация папки с документами
+```json
+{
+  "server_name": "McpRag",
+  "tool_name": "index_folder",
+  "arguments": {
+    "folderPath": "c:\\Users\\alink\\source\\repos\\McpRag\\test_docs"
+  }
+}
+```
+
+### Поиск документов
+```json
+{
+  "server_name": "McpRag",
+  "tool_name": "search_docs",
+  "arguments": {
+    "query": "C# programming",
+    "topK": 3
+  }
+}
+```
+
+## Ограничения и улучшения
+
+1. **Ограничения**:
+   - Только поддержка ChromaDB
+   - Не реализована обработка ошибок при недоступности ChromaDB
+   - Локальная загрузка моделей Ollama может потребовать время
+
+2. **Улучшения для будущих версий**:
+   - Добавить поддержку других vector store (Pinecone, Weaviate)
+   - Добавить обработку ошибок и ретries
+   - Добавить кэширование эмбеддингов
+   - Добавить поддержку параллельной индексации файлов

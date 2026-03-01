@@ -27,4 +27,5 @@ public interface IOllamaService
     /// Generates a response from LLM based on prompt.
     /// </summary>
     Task<string> GenerateAsync(string prompt, CancellationToken ct = default);
+    Task<float[]> GenerateEmbeddingsAsync(string text, CancellationToken ct = default);
 }

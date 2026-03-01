@@ -14,6 +14,7 @@ builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 // Add configuration
 builder.Services.Configure<OllamaConfig>(builder.Configuration.GetSection("Ollama"));
 builder.Services.Configure<IndexerConfig>(builder.Configuration.GetSection("Indexer"));
+builder.Services.Configure<VectorStoreConfig>(builder.Configuration.GetSection("VectorStore"));
 
 // Add HttpClient with configuration
 builder.Services.AddHttpClient<IOllamaService, OllamaService>((sp, client) =>
@@ -22,6 +23,9 @@ builder.Services.AddHttpClient<IOllamaService, OllamaService>((sp, client) =>
     client.BaseAddress = new Uri(config.BaseUrl);
     client.Timeout = TimeSpan.FromSeconds(config.TimeoutSeconds);
 });
+
+// Add vector store
+builder.Services.AddSingleton<IVectorStoreService, ChromaDbService>();
 
 // Add indexer service
 builder.Services.AddSingleton<IIndexerService, IndexerService>();
@@ -34,7 +38,9 @@ builder.Services
     .WithTools<IndexFolderTools>()
     .WithTools<CheckOllamaTool>()
     .WithTools<AskLlmTool>()
-    .WithTools<ListFilesTool>();
+    .WithTools<ListFilesTool>()
+    .WithTools<SearchDocsTool>()
+    .WithTools<VectorStoreStatusTool>();
 
 var host = builder.Build();
 

@@ -15,12 +15,17 @@ namespace McpRag;
 public class IndexerService : IIndexerService
 {
     private readonly IndexerConfig _config;
+    private readonly IVectorStoreService _vectorStore;
+    private readonly IOllamaService _ollama;
     private readonly ILogger<IndexerService> _logger;
     private List<FileContent> _loadedFiles = new();
 
-    public IndexerService(IOptions<IndexerConfig> config, ILogger<IndexerService> logger)
+    public IndexerService(IOptions<IndexerConfig> config, IVectorStoreService vectorStore, 
+        IOllamaService ollama, ILogger<IndexerService> logger)
     {
         _config = config.Value;
+        _vectorStore = vectorStore;
+        _ollama = ollama;
         _logger = logger;
     }
 
@@ -101,6 +106,9 @@ public class IndexerService : IIndexerService
 
             _loadedFiles = loadedFiles;
             _logger.LogInformation("Loaded {Count} files, skipped {Skipped} files", loadedFiles.Count, skippedFiles);
+            
+            // Process and index files
+            await IndexFilesAsync(loadedFiles, ct);
         }
         catch (Exception ex)
         {
@@ -109,6 +117,84 @@ public class IndexerService : IIndexerService
         }
 
         return loadedFiles;
+    }
+
+    private async Task IndexFilesAsync(List<FileContent> files, CancellationToken ct = default)
+    {
+        _logger.LogInformation("Indexing {Count} files", files.Count);
+        
+        var chunks = new List<DocumentChunk>();
+        
+        foreach (var file in files)
+        {
+            // Split file into chunks
+            var fileChunks = SplitDocumentIntoChunks(file.Content);
+            
+            foreach (var chunk in fileChunks)
+            {
+                // Generate embedding for each chunk
+                var embedding = await _ollama.GenerateEmbeddingsAsync(chunk, ct);
+                
+                chunks.Add(new DocumentChunk
+                {
+                    Text = chunk,
+                    Source = file.Path,
+                    ChunkIndex = fileChunks.IndexOf(chunk),
+                    Embedding = embedding,
+                    Metadata = new Dictionary<string, object>
+                    {
+                        ["file_name"] = file.FileName,
+                        ["extension"] = file.Extension,
+                        ["size"] = file.Size
+                    }
+                });
+            }
+        }
+        
+        // Add to vector store
+        await _vectorStore.AddDocumentsAsync(chunks, ct);
+        _logger.LogInformation("Indexed {Count} document chunks", chunks.Count);
+    }
+
+    private List<string> SplitDocumentIntoChunks(string text, int chunkSize = 1000, int chunkOverlap = 200)
+    {
+        var chunks = new List<string>();
+        int start = 0;
+        int textLength = text.Length;
+        int lastChunkStart = 0;
+        
+        while (start < textLength)
+        {
+            int end = Math.Min(start + chunkSize, textLength);
+            
+            // Find sentence boundary for cleaner chunks
+            if (end < textLength)
+            {
+                int lastPeriod = text.LastIndexOf('.', end, end - start);
+                int lastNewline = text.LastIndexOf('\n', end, end - start);
+                
+                if (lastPeriod > start + chunkSize / 2)
+                {
+                    end = lastPeriod + 1;
+                }
+                else if (lastNewline > start + chunkSize / 2)
+                {
+                    end = lastNewline + 1;
+                }
+            }
+            
+            chunks.Add(text.Substring(start, end - start).Trim());
+            
+            start = end - chunkOverlap;
+            if (start <= lastChunkStart) // Avoid infinite loop
+            {
+                start = end;
+            }
+            
+            lastChunkStart = end;
+        }
+        
+        return chunks;
     }
 
     public List<FileContent> GetLoadedFiles()
