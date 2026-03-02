@@ -10,7 +10,9 @@ using System.Threading.Tasks;
 namespace McpRag;
 
 /// <summary>
-/// Implementation of IIndexerService for loading files from disk.
+/// Сервис для индексации файлов из директории.
+/// Реализует интерфейс <see cref="IIndexerService"/> и отвечает за загрузку,
+/// разбиение на чанки и индексацию контента файлов в векторное хранилище.
 /// </summary>
 public class IndexerService : IIndexerService
 {
@@ -20,6 +22,13 @@ public class IndexerService : IIndexerService
     private readonly ILogger<IndexerService> _logger;
     private List<FileContent> _loadedFiles = new();
 
+    /// <summary>
+    /// Инициализирует новый экземпляр <see cref="IndexerService"/>.
+    /// </summary>
+    /// <param name="config">Конфигурация индексера.</param>
+    /// <param name="vectorStore">Векторное хранилище для хранения эмбеддингов.</param>
+    /// <param name="ollama">Сервис для работы с Ollama (генерация эмбеддингов).</param>
+    /// <param name="logger">Логгер для записи сообщений.</param>
     public IndexerService(IOptions<IndexerConfig> config, IVectorStoreService vectorStore, 
         IOllamaService ollama, ILogger<IndexerService> logger)
     {
@@ -29,6 +38,13 @@ public class IndexerService : IIndexerService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Загружает файлы из указанной директории по заданному паттерну и индексирует их.
+    /// </summary>
+    /// <param name="folderPath">Путь к директории для сканирования.</param>
+    /// <param name="pattern">Паттерн поиска файлов (например, "*.txt").</param>
+    /// <param name="ct">Токен отмены для отмены операции.</param>
+    /// <returns>Список загруженных файлов.</returns>
     public async Task<List<FileContent>> LoadFilesAsync(string folderPath, string pattern, CancellationToken ct = default)
     {
         _logger.LogInformation("Loading files from folder: {FolderPath} with pattern: {Pattern}", folderPath, pattern);
@@ -119,6 +135,11 @@ public class IndexerService : IIndexerService
         return loadedFiles;
     }
 
+    /// <summary>
+    /// Индексирует загруженные файлы: разбивает на чанки, генерирует эмбеддинги и сохраняет в векторное хранилище.
+    /// </summary>
+    /// <param name="files">Список файлов для индексации.</param>
+    /// <param name="ct">Токен отмены для отмены операции.</param>
     private async Task IndexFilesAsync(List<FileContent> files, CancellationToken ct = default)
     {
         _logger.LogInformation("Indexing {Count} files", files.Count);
@@ -156,6 +177,13 @@ public class IndexerService : IIndexerService
         _logger.LogInformation("Indexed {Count} document chunks", chunks.Count);
     }
 
+    /// <summary>
+    /// Разбивает документ на чанки с поддержкой перекрытия.
+    /// </summary>
+    /// <param name="text">Текст для разбиения.</param>
+    /// <param name="chunkSize">Размер каждого чанка (по умолчанию 1000 символов).</param>
+    /// <param name="chunkOverlap">Перекрытие между чанками (по умолчанию 200 символов).</param>
+    /// <returns>Список чанков документа.</returns>
     private List<string> SplitDocumentIntoChunks(string text, int chunkSize = 1000, int chunkOverlap = 200)
     {
         var chunks = new List<string>();
@@ -197,11 +225,18 @@ public class IndexerService : IIndexerService
         return chunks;
     }
 
+    /// <summary>
+    /// Возвращает список загруженных файлов.
+    /// </summary>
+    /// <returns>Список загруженных файлов.</returns>
     public List<FileContent> GetLoadedFiles()
     {
         return _loadedFiles;
     }
 
+    /// <summary>
+    /// Очищает список загруженных файлов.
+    /// </summary>
     public void ClearLoadedFiles()
     {
         _loadedFiles.Clear();
