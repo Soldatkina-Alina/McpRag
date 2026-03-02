@@ -36,6 +36,7 @@ builder.Logging.AddSerilog(Log.Logger);
 builder.Services.Configure<OllamaConfig>(builder.Configuration.GetSection("Ollama"));
 builder.Services.Configure<IndexerConfig>(builder.Configuration.GetSection("Indexer"));
 builder.Services.Configure<VectorStoreConfig>(builder.Configuration.GetSection("VectorStore"));
+builder.Services.Configure<RAGConfig>(builder.Configuration.GetSection("RAG"));
 
 // Add HttpClient with configuration
 builder.Services.AddHttpClient<IOllamaService, OllamaService>((sp, client) =>
@@ -51,6 +52,9 @@ builder.Services.AddSingleton<IVectorStoreService, ChromaDbService>();
 // Add indexer service
 builder.Services.AddSingleton<IIndexerService, IndexerService>();
 
+// Add RAG services
+builder.Services.AddSingleton<ContextFormatter>();
+
 // Add the MCP services: the transport to use (stdio) and the tools to register.
 builder.Services
     .AddMcpServer()
@@ -61,7 +65,8 @@ builder.Services
     .WithTools<AskLlmTool>()
     .WithTools<ListFilesTool>()
     .WithTools<SearchDocsTool>()
-    .WithTools<VectorStoreStatusTool>();
+    .WithTools<VectorStoreStatusTool>()
+    .WithTools<AskQuestionTool>();
 
 var host = builder.Build();
 

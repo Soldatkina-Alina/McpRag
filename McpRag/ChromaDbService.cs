@@ -97,6 +97,20 @@ public class ChromaDbService : IVectorStoreService
     /// <exception cref="HttpRequestException">Выбрасывается, если запрос к API завершился с ошибкой.</exception>
     public async Task<IEnumerable<DocumentChunk>> SearchAsync(string query, int topK, CancellationToken cancellationToken = default)
     {
+        var results = await SearchWithScoreAsync(query, topK, cancellationToken);
+        return results.Select(r => r.Chunk);
+    }
+
+    /// <summary>
+    /// Ищет наиболее релевантные фрагменты документов с релевантностью.
+    /// </summary>
+    /// <param name="query">Текст запроса для поиска.</param>
+    /// <param name="topK">Максимальное количество результатов для возврата.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>Коллекция найденных фрагментов документов с релевантностью.</returns>
+    /// <exception cref="HttpRequestException">Выбрасывается, если запрос к API завершился с ошибкой.</exception>
+    public async Task<List<SearchResult>> SearchWithScoreAsync(string query, int topK, CancellationToken cancellationToken = default)
+    {
         _logger.LogInformation("Searching for {TopK} relevant documents with query: {Query}",
             topK, query);
 
@@ -105,7 +119,7 @@ public class ChromaDbService : IVectorStoreService
         if (string.IsNullOrEmpty(collectionId))
         {
             _logger.LogWarning("Collection {Collection} not found, returning empty results", _collectionName);
-            return Enumerable.Empty<DocumentChunk>();
+            return new List<SearchResult>();
         }
 
         var queryEmbedding = await _ollama.GenerateEmbeddingsAsync(query, cancellationToken);
@@ -135,15 +149,35 @@ public class ChromaDbService : IVectorStoreService
         if (searchResponse == null)
         {
             _logger.LogWarning("No search results found for query: {Query}", query);
-            return Enumerable.Empty<DocumentChunk>();
+            return new List<SearchResult>();
         }
 
+        var results = new List<SearchResult>();
         var documentChunks = searchResponse.ToDocumentChunks();
 
-        _logger.LogInformation("Found {Count} relevant document chunks for query: {Query}",
-            documentChunks.Count, query);
+        // Calculate score from distance (lower distance = higher score)
+        for (int i = 0; i < documentChunks.Count; i++)
+        {
+            var chunk = documentChunks[i];
+            if (chunk.Metadata.TryGetValue("distance", out var distanceObj))
+            {
+                var distance = Convert.ToDouble(distanceObj);
+                // Convert distance to score (0-1, where 0 is perfect match)
+                var score = 1.0 / (1.0 + distance);
+                chunk.Score = (float)score;
+                results.Add(new SearchResult { Chunk = chunk, Score = (float)score });
+            }
+            else
+            {
+                chunk.Score = 0.8f;
+                results.Add(new SearchResult { Chunk = chunk, Score = 0.8f });
+            }
+        }
 
-        return documentChunks;
+        _logger.LogInformation("Found {Count} relevant document chunks for query: {Query}",
+            results.Count, query);
+
+        return results;
     }
 
     /// <summary>
