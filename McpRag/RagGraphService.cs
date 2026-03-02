@@ -57,7 +57,7 @@ public class RagGraphService : IRagGraphService
             state = await SearchNodeAsync(state, ct);
             
             // Проверка релевантности
-            if (!state.HasRelevantDocuments)
+            if (!state.HasRelevantDocuments || state.Documents.Count == 0 || state.Documents.All(d => d.Score < _config.Value.MinRelevanceScore))
             {
                 var maxScore = state.Documents.FirstOrDefault()?.Score ?? 0;
                 state.Answer = $"❌ В предоставленных документах не найдено информации.\n" +
@@ -70,7 +70,8 @@ public class RagGraphService : IRagGraphService
                     Metadata = new Dictionary<string, object>
                     {
                         ["max_score"] = maxScore,
-                        ["threshold"] = _config.Value.MinRelevanceScore
+                        ["threshold"] = _config.Value.MinRelevanceScore,
+                        ["total_chunks"] = state.Documents.Count
                     }
                 });
                 return state;

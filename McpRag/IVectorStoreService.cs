@@ -117,6 +117,6 @@ public static class VectorStoreServiceExtensions
     public static async Task<List<SearchResult>> SearchWithScoreAsync(this IVectorStoreService vectorStore, string query, int topK, CancellationToken cancellationToken = default)
     {
         var results = await vectorStore.SearchAsync(query, topK, cancellationToken);
-        return results.Select(c => new SearchResult { Chunk = c, Score = 0.8f }).ToList();
+        return results.Select(c => new SearchResult { Chunk = c, Score = 0.0f }).ToList();
     }
 }
