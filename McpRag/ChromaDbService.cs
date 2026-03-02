@@ -1,11 +1,12 @@
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
 
 namespace McpRag;
 
@@ -20,6 +21,9 @@ public class ChromaDbService : IVectorStoreService
     private readonly IOllamaService _ollama;
     private readonly ILogger<ChromaDbService> _logger;
 
+    // API v2 endpoints
+    private readonly string _collectionsEndpoint = "/api/v2/tenants/default_tenant/databases/default_database/collections";
+
     public ChromaDbService(HttpClient httpClient, IOllamaService ollama, ILogger<ChromaDbService> logger)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
@@ -33,6 +37,9 @@ public class ChromaDbService : IVectorStoreService
     {
         _logger.LogInformation("Adding {Count} document chunks to ChromaDB collection: {Collection}", 
             chunks.Count(), _collectionName);
+
+        // Get collection ID, create if not exists
+        var collectionId = await GetOrCreateCollectionIdAsync(cancellationToken);
 
         var request = new
         {
@@ -52,7 +59,7 @@ public class ChromaDbService : IVectorStoreService
         var json = JsonSerializer.Serialize(request);
         var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
-        var response = await _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/add", content, cancellationToken);
+        var response = await _httpClient.PostAsync($"{_collectionsEndpoint}/{collectionId}/add", content, cancellationToken);
         
         if (!response.IsSuccessStatusCode)
         {
@@ -70,6 +77,14 @@ public class ChromaDbService : IVectorStoreService
         _logger.LogInformation("Searching for {TopK} relevant documents with query: {Query}", 
             topK, query);
 
+        // Get collection ID
+        var collectionId = await GetCollectionIdAsync(cancellationToken);
+        if (string.IsNullOrEmpty(collectionId))
+        {
+            _logger.LogWarning("Collection {Collection} not found, returning empty results", _collectionName);
+            return Enumerable.Empty<DocumentChunk>();
+        }
+
         var queryEmbedding = await _ollama.GenerateEmbeddingsAsync(query, cancellationToken);
         
         var request = new
@@ -81,7 +96,7 @@ public class ChromaDbService : IVectorStoreService
         var json = JsonSerializer.Serialize(request);
         var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
-        var response = await _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/query", content, cancellationToken);
+        var response = await _httpClient.PostAsync($"{_collectionsEndpoint}/{collectionId}/query", content, cancellationToken);
         
         if (!response.IsSuccessStatusCode)
         {
@@ -128,6 +143,14 @@ public class ChromaDbService : IVectorStoreService
     {
         _logger.LogInformation("Clearing all documents from ChromaDB collection: {Collection}", _collectionName);
 
+        // Get collection ID
+        var collectionId = await GetCollectionIdAsync(cancellationToken);
+        if (string.IsNullOrEmpty(collectionId))
+        {
+            _logger.LogWarning("Collection {Collection} not found, skipping clear operation", _collectionName);
+            return;
+        }
+
         var request = new
         {
             where = new Dictionary<string, object>()
@@ -136,7 +159,7 @@ public class ChromaDbService : IVectorStoreService
         var json = JsonSerializer.Serialize(request);
         var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
 
-        var response = await _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/delete", content, cancellationToken);
+        var response = await _httpClient.PostAsync($"{_collectionsEndpoint}/{collectionId}/delete", content, cancellationToken);
         
         if (!response.IsSuccessStatusCode)
         {
@@ -153,7 +176,15 @@ public class ChromaDbService : IVectorStoreService
     {
         _logger.LogInformation("Getting document count from ChromaDB collection: {Collection}", _collectionName);
 
-        var response = await _httpClient.GetAsync($"/api/v1/collections/{_collectionName}/count", cancellationToken);
+        // Get collection ID
+        var collectionId = await GetCollectionIdAsync(cancellationToken);
+        if (string.IsNullOrEmpty(collectionId))
+        {
+            _logger.LogInformation("Collection {Collection} not found, returning 0", _collectionName);
+            return 0;
+        }
+
+        var response = await _httpClient.GetAsync($"{_collectionsEndpoint}/{collectionId}/count", cancellationToken);
         
         if (!response.IsSuccessStatusCode)
         {
@@ -164,12 +195,103 @@ public class ChromaDbService : IVectorStoreService
         }
 
         var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
-        var countResponse = JsonSerializer.Deserialize<ChromaCountResponse>(responseContent);
+        int.TryParse(responseContent, out int count);
+
+        _logger.LogInformation("ChromaDB collection contains {Count} documents", count);
         
-        _logger.LogInformation("ChromaDB collection contains {Count} documents", countResponse.Count);
-        
-        return countResponse.Count;
+        return count;
     }
+
+    private async Task<string> GetCollectionIdAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogDebug("Getting collection ID for {Collection}", _collectionName);
+        
+        var response = await _httpClient.GetAsync(_collectionsEndpoint, cancellationToken);
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("Failed to get collections: {StatusCode} - {Content}", 
+                response.StatusCode, await response.Content.ReadAsStringAsync(cancellationToken));
+            return null;
+        }
+
+        var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+        var collections = JsonSerializer.Deserialize<List<ChromaCollection>>(responseContent);
+        
+        var collection = collections?.FirstOrDefault(c => c.Name == _collectionName);
+        return collection?.Id;
+    }
+
+    private async Task<string> GetOrCreateCollectionIdAsync(CancellationToken cancellationToken)
+    {
+        var collectionId = await GetCollectionIdAsync(cancellationToken);
+        
+        if (!string.IsNullOrEmpty(collectionId))
+        {
+            return collectionId;
+        }
+
+        _logger.LogInformation("Creating ChromaDB collection: {Collection}", _collectionName);
+        
+        var request = new
+        {
+            name = _collectionName,
+            metadata = new Dictionary<string, object>
+            {
+                ["description"] = "Documents for RAG system"
+            }
+        };
+
+        var json = JsonSerializer.Serialize(request);
+        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        var response = await _httpClient.PostAsync(_collectionsEndpoint, content, cancellationToken);
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            // If collection already exists, return existing ID
+            if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
+            {
+                _logger.LogWarning("Collection {Collection} already exists, getting existing ID", _collectionName);
+                return await GetCollectionIdAsync(cancellationToken);
+            }
+            
+            var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogError("Failed to create collection {Collection}: {StatusCode} - {Content}", 
+                _collectionName, response.StatusCode, errorContent);
+            throw new HttpRequestException($"Failed to create collection: {response.StatusCode} - {errorContent}");
+        }
+
+        _logger.LogInformation("Collection {Collection} created successfully", _collectionName);
+        
+        // Get ID of newly created collection
+        return await GetCollectionIdAsync(cancellationToken);
+    }
+}
+
+public class ChromaCollection
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; }
+
+    [JsonPropertyName("metadata")]
+    public Dictionary<string, object> Metadata { get; set; }
+
+    [JsonPropertyName("tenant")]
+    public string Tenant { get; set; }
+
+    [JsonPropertyName("database")]
+    public string Database { get; set; }
+
+    // Остальные поля - опционально
+    [JsonPropertyName("dimension")]
+    public int? Dimension { get; set; }
+
+    [JsonPropertyName("version")]
+    public int Version { get; set; }
 }
 
 public class ChromaSearchResponse
