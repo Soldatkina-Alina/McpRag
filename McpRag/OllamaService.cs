@@ -8,12 +8,23 @@ using Microsoft.Extensions.Options;
 
 namespace McpRag;
 
+/// <summary>
+/// Сервис для взаимодействия с Ollama API, предоставляющий методы для работы с моделями,
+/// генерации текста и эмбеддингов.
+/// </summary>
 public class OllamaService : IOllamaService
 {
     private readonly HttpClient _httpClient;
     private readonly OllamaConfig _config;
     private readonly ILogger<OllamaService> _logger;
 
+    /// <summary>
+    /// Инициализирует новый экземпляр <see cref="OllamaService"/>.
+    /// </summary>
+    /// <param name="httpClient">HTTP-клиент для отправки запросов к Ollama API.</param>
+    /// <param name="config">Конфигурация Ollama, содержащая параметры подключения и модели.</param>
+    /// <param name="logger">Логгер для записи информации о работе сервиса.</param>
+    /// <exception cref="ArgumentNullException">Выбрасывается, если любой из параметров равен null.</exception>
     public OllamaService(HttpClient httpClient, IOptions<OllamaConfig> config, ILogger<OllamaService> logger)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
@@ -24,11 +35,18 @@ public class OllamaService : IOllamaService
         _httpClient.Timeout = TimeSpan.FromSeconds(_config.TimeoutSeconds);
     }
 
+    /// <summary>
+    /// Проверяет доступность Ollama API.
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>True, если API доступен; иначе false.</returns>
     public async Task<bool> IsHealthyAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            var response = await _httpClient.GetAsync("/api/health", cancellationToken);
+            // Ollama doesn't have a /api/health endpoint in all versions
+            // Check /api/tags instead which is more reliable
+            var response = await _httpClient.GetAsync("/api/tags", cancellationToken);
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex)
@@ -38,6 +56,11 @@ public class OllamaService : IOllamaService
         }
     }
 
+    /// <summary>
+    /// Получает список доступных моделей в Ollama.
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>Список названий доступных моделей.</returns>
     public async Task<List<string>> ListModelsAsync(CancellationToken cancellationToken = default)
     {
         try
@@ -62,12 +85,24 @@ public class OllamaService : IOllamaService
         }
     }
 
+    /// <summary>
+    /// Проверяет доступность конкретной модели в Ollama.
+    /// </summary>
+    /// <param name="modelName">Название модели для проверки.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>True, если модель доступна; иначе false.</returns>
     public async Task<bool> IsModelAvailableAsync(string modelName, CancellationToken cancellationToken = default)
     {
         var models = await ListModelsAsync(cancellationToken);
         return models.Any(m => m.StartsWith(modelName, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Генерирует текстовый ответ на заданный промпт с использованием конфигурационной модели.
+    /// </summary>
+    /// <param name="prompt">Промпт для генерации ответа.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>Сгенерированный текстовый ответ или сообщение об ошибке.</returns>
     public async Task<string> GenerateAsync(string prompt, CancellationToken cancellationToken = default)
     {
         try
@@ -113,6 +148,14 @@ public class OllamaService : IOllamaService
         }
     }
 
+    /// <summary>
+    /// Генерирует эмбеддинги для заданного текста с использованием конфигурационной модели для эмбеддингов.
+    /// </summary>
+    /// <param name="text">Текст для генерации эмбеддингов.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>Массив значений эмбеддингов.</returns>
+    /// <exception cref="HttpRequestException">Выбрасывается, если запрос к API завершился с ошибкой.</exception>
+    /// <exception cref="InvalidOperationException">Выбрасывается, если API вернул пустой ответ.</exception>
     public async Task<float[]> GenerateEmbeddingsAsync(string text, CancellationToken cancellationToken = default)
     {
         try

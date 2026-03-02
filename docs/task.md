@@ -819,24 +819,36 @@ echo @"
 # Ожидаемый ответ: информация из разных файлов с разными источниками
 
 Задача 9: Базовая структура графа состояний
-✅ Что должно работать:
-- Граф с двумя узлами: Search и Generate
-- Состояние передается между узлами
-- В ответе виден путь выполнения
-- ask_question теперь использует граф (внутренняя логика пока как в Задаче 8)
-- Обработка случая, когда документы не найдены
-
-📝 Промт:
-
 Добавь простую версию графа состояний, постепенно заменяя прямой RAG из Задачи 8.
-
-⚠️ ВАЖНО: ask_question должен продолжать работать так же, как в Задаче 8,
-   но теперь его логика организована через граф. Пользователь не должен
-   заметить разницы в ответах, только увидеть путь выполнения.
 
 Требования:
 
-1. Создай классы для состояния:
+1. СОЗДАЙ ОБЩИЙ КОНФИГ (переиспользуй из Задачи 8):
+   public class RAGConfig
+   {
+       public int MaxChunks { get; set; } = 5;
+       public float MinRelevanceScore { get; set; } = 0.7f;
+       public int MaxContextTokens { get; set; } = 2000;
+       public bool IncludeMetadataInContext { get; set; } = true;
+   }
+
+2. ОБНОВИ DocumentChunk (добавь поле Score):
+   public class DocumentChunk
+   {
+       // существующие поля из Задачи 7
+       public string Id { get; set; }
+       public string Text { get; set; }
+       public string Source { get; set; }
+       public int ChunkIndex { get; set; }
+       public float[] Embedding { get; set; }
+       public DateTime IndexedAt { get; set; }
+       public Dictionary<string, object> Metadata { get; set; } = new();
+       
+       // НОВОЕ: поле для релевантности от ChromaDB
+       public float Score { get; set; }
+   }
+
+3. СОЗДАЙ КЛАССЫ ДЛЯ СОСТОЯНИЯ:
    public class ExecutionStep
    {
        public string NodeName { get; set; }
@@ -847,34 +859,43 @@ echo @"
    public class RagState
    {
        public string Question { get; set; }
-       public string RewrittenQuery { get; set; }  // пока не используется, но подготовка
        public List<DocumentChunk> Documents { get; set; } = new();
        public string Answer { get; set; }
        public List<ExecutionStep> ExecutionSteps { get; set; } = new();
        public bool HasError { get; set; }
        public string ErrorMessage { get; set; }
+       
+       // Вспомогательные свойства
+       public bool HasRelevantDocuments => 
+           Documents.Any(d => d.Score >= _config.MinRelevanceScore);
    }
 
-2. Создай интерфейс IRagGraphService:
+4. СОЗДАЙ ИНТЕРФЕЙС IRagGraphService:
    public interface IRagGraphService
    {
        Task<RagState> ExecuteAsync(string question, CancellationToken ct = default);
    }
 
-3. Реализуй RagGraphService:
+5. РЕАЛИЗУЙ RagGraphService (ПЕРЕИСПОЛЬЗУЯ код из Задачи 8):
    public class RagGraphService : IRagGraphService
    {
        private readonly IVectorStoreService _vectorStore;
        private readonly IOllamaService _ollama;
+       private readonly IOptions<RAGConfig> _config;
+       private readonly ContextFormatter _contextFormatter;
        private readonly ILogger<RagGraphService> _logger;
 
        public RagGraphService(
            IVectorStoreService vectorStore,
            IOllamaService ollama,
+           IOptions<RAGConfig> config,
+           ContextFormatter contextFormatter,
            ILogger<RagGraphService> logger)
        {
            _vectorStore = vectorStore;
            _ollama = ollama;
+           _config = config;
+           _contextFormatter = contextFormatter;
            _logger = logger;
        }
 
@@ -884,22 +905,30 @@ echo @"
            
            try
            {
-               // Узел 1: Search
+               // Узел 1: Search (с сохранением Score)
                state = await SearchNodeAsync(state, ct);
                
-               // Проверка: есть ли документы?
-               if (!state.Documents.Any())
+               // Проверка релевантности (как в Задаче 8)
+               if (!state.HasRelevantDocuments)
                {
-                   state.Answer = "❌ Не найдено релевантных документов по вашему вопросу.";
+                   var maxScore = state.Documents.FirstOrDefault()?.Score ?? 0;
+                   state.Answer = $"❌ В предоставленных документах не найдено информации.\n" +
+                                  $"Наиболее похожие документы имеют релевантность {maxScore:P1}, " +
+                                  $"что ниже порога {_config.Value.MinRelevanceScore:P1}.";
+                   
                    state.ExecutionSteps.Add(new ExecutionStep 
                    { 
-                       NodeName = "NoDocuments",
-                       Metadata = new Dictionary<string, object> { ["reason"] = "Empty search results" }
+                       NodeName = "NoRelevantDocs",
+                       Metadata = new Dictionary<string, object>
+                       {
+                           ["max_score"] = maxScore,
+                           ["threshold"] = _config.Value.MinRelevanceScore
+                       }
                    });
                    return state;
                }
                
-               // Узел 2: Generate
+               // Узел 2: Generate (используя ContextFormatter из Задачи 8)
                state = await GenerateNodeAsync(state, ct);
                
                return state;
@@ -924,12 +953,22 @@ echo @"
            
            try
            {
-               // Поиск документов (как в Задаче 8)
-               var chunks = await _vectorStore.SearchAsync(state.Question, topK: 5, ct);
-               state.Documents = chunks.ToList();
+               // Используем SearchWithScoreAsync для получения релевантности
+               var results = await _vectorStore.SearchWithScoreAsync(
+                   state.Question, 
+                   _config.Value.MaxChunks, 
+                   ct);
+               
+               // Сохраняем документы вместе с их Score
+               state.Documents = results.Select(r => 
+               {
+                   r.Chunk.Score = r.Score;
+                   return r.Chunk;
+               }).ToList();
                
                step.Metadata["chunks_found"] = state.Documents.Count;
-               step.Metadata["query"] = state.Question;
+               step.Metadata["max_score"] = state.Documents.FirstOrDefault()?.Score ?? 0;
+               step.Metadata["threshold"] = _config.Value.MinRelevanceScore;
            }
            catch (Exception ex)
            {
@@ -950,24 +989,47 @@ echo @"
            
            try
            {
-               // Формирование контекста (как в Задаче 8)
-               var context = string.Join("\n\n---\n\n", 
-                   state.Documents.Select(d => d.Text));
+               // Фильтруем только релевантные документы (как в Задаче 8)
+               var relevantChunks = state.Documents
+                   .Where(d => d.Score >= _config.Value.MinRelevanceScore)
+                   .ToList();
                
+               // Используем ContextFormatter из Задачи 8
+               var context = _contextFormatter.FormatContext(
+                   relevantChunks, 
+                   _config.Value.IncludeMetadataInContext);
+               
+               // Проверка длины контекста
+               if (context.Length > _config.Value.MaxContextTokens * 4) // грубая оценка
+               {
+                   context = context.Substring(0, _config.Value.MaxContextTokens * 4) + 
+                            "\n\n...[контекст обрезан]";
+                   step.Metadata["truncated"] = true;
+               }
+               
+               // Промпт из Задачи 8 (проверенный, надежный)
                var prompt = $@"
-Ответь на вопрос, используя ТОЛЬКО информацию из предоставленного контекста.
+Ты - ассистент, который отвечает на вопросы, используя ТОЛЬКО информацию из предоставленного контекста.
 
-Контекст:
+ВАЖНЫЕ ПРАВИЛА:
+1. Отвечай строго на основе контекста, не используй свои знания
+2. Если в контексте нет ответа - скажи, что информации нет
+3. Ссылайся на источники в формате [Источник N]
+4. Не придумывай факты и не дополняй информацию
+5. Если информация неполная - так и скажи
+
+Контекст (документы):
 {context}
 
-Вопрос: {state.Question}
+Вопрос пользователя: {state.Question}
 
-Ответ:";
+Ответ (только на основе контекста, с указанием источников):";
                
                state.Answer = await _ollama.GenerateAsync(prompt, ct);
                
+               step.Metadata["chunks_used"] = relevantChunks.Count;
                step.Metadata["context_length"] = context.Length;
-               step.Metadata["chunks_used"] = state.Documents.Count;
+               step.Metadata["truncated"] = context.Length > _config.Value.MaxContextTokens * 4;
            }
            catch (Exception ex)
            {
@@ -983,7 +1045,11 @@ echo @"
        }
    }
 
-4. Обнови AskQuestionTool для использования графа:
+6. ЗАРЕГИСТРИРУЙ СЕРВИСЫ В DI:
+   builder.Services.AddScoped<IRagGraphService, RagGraphService>();
+   builder.Services.AddSingleton<ContextFormatter>(); // переиспользуем из Задачи 8
+
+7. ОБНОВИ AskQuestionTool для использования графа:
    [McpServerTool]
    public async Task<string> AskQuestion(
        [Description("Вопрос к базе знаний")] string question,
@@ -1006,7 +1072,7 @@ echo @"
            
            foreach (var step in state.ExecutionSteps)
            {
-               result.AppendLine($"- {step.NodeName} ({step.Timestamp:HH:mm:ss})");
+               result.AppendLine($"- **{step.NodeName}** ({step.Timestamp:HH:mm:ss})");
                if (step.Metadata.Any())
                {
                    var meta = string.Join(", ", step.Metadata.Select(m => $"{m.Key}: {m.Value}"));
@@ -1014,17 +1080,24 @@ echo @"
                }
            }
            
+           // Добавляем источники (как в Задаче 8)
            if (state.Documents.Any())
            {
-               result.AppendLine();
-               result.AppendLine("📚 **Источники:**");
                var sources = state.Documents
+                   .Where(d => d.Score >= _config.Value.MinRelevanceScore)
                    .Select(d => Path.GetFileName(d.Source))
                    .Distinct();
+               
+               result.AppendLine();
+               result.AppendLine("📚 **Источники:**");
                foreach (var source in sources)
                {
                    result.AppendLine($"- {source}");
                }
+               
+               result.AppendLine();
+               result.AppendLine($"*Найдено {state.Documents.Count(d => d.Score >= _config.Value.MinRelevanceScore)} " +
+                                $"релевантных чанков из {state.Documents.Count} проверенных*");
            }
            
            return result.ToString();
@@ -1036,24 +1109,25 @@ echo @"
        }
    }
 
-5. Зарегистрируй сервис в DI:
-   builder.Services.AddScoped<IRagGraphService, RagGraphService>();
-
-6. Добавь настройки (опционально):
+8. ДОБАВЬ КОНФИГУРАЦИЮ В appsettings.json:
    {
      "RAG": {
        "MaxChunks": 5,
-       "MinRelevanceScore": 0.7
+       "MinRelevanceScore": 0.7,
+       "MaxContextTokens": 2000,
+       "IncludeMetadataInContext": true
      }
    }
 
 Напиши полный код:
+- Обновленный DocumentChunk.cs (с полем Score)
 - ExecutionStep.cs
 - RagState.cs
 - IRagGraphService.cs
 - RagGraphService.cs
 - Обновленный AskQuestionTool.cs
 - Фрагмент Program.cs с регистрацией
+- Обновленный appsettings.json
 
 Задача 10: Оценка релевантности документов
  Что должно работать:

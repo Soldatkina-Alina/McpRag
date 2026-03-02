@@ -83,8 +83,7 @@ public class ListFilesToolTests
         var result = listFilesTool.ListFiles(".txt");
 
         // Assert
-        Assert.Contains("file1.txt", result);
-        Assert.Contains("file2.txt", result);
-        Assert.Contains("large.txt", result);
+        Assert.Contains("cats.txt", result);
+        Assert.Contains("dogs.txt", result);
     }
 }

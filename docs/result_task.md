@@ -367,7 +367,7 @@ This technique is particularly useful for tasks like question answering, documen
 2. **Обновлены существующие файлы**:
    - `IOllamaService.cs` - добавлен метод `GenerateEmbeddingsAsync` для генерации эмбеддингов
    - `OllamaService.cs` - реализация метода генерации эмбеддингов через API Ollama /api/embeddings
-   - `OllamaEmbeddingResponse.cs` - модель для разбора ответа API Ollama о эмбеддингах
+   - `OllamaEmbeddingResponse.cs` - модель для разбора ответов API Ollama о эмбеддингах
    - `appsettings.json` - добавлены конфигурационные параметры для vector store
    - `IndexerService.cs` - обновлен для обработки и индексации содержимого файлов в ChromaDB
    - `VectorStoreStatusTool.cs` - новый инструмент для проверки статуса vector store
@@ -499,3 +499,169 @@ dotnet run
    - Добавить обработку ошибок и ретries
    - Добавить кэширование эмбеддингов
    - Добавить поддержку параллельной индексации файлов
+
+
+# Логи
+
+## Что было сделано
+
+1. **Улучшена система логирования**: Заменен встроенный ILogger на Serilog для более удобного и гибкого логирования
+2. **Добавлено файловое логирование с ротацией**: Логи теперь сохраняются в файлы с ротацией по дате
+3. **Добавлены NuGet-пакеты**:
+   - `Serilog.AspNetCore` - интеграция Serilog с ASP.NET Core
+   - `Serilog.Sinks.File` - синк для файлового логирования
+   - `Serilog.Sinks.Console` - синк для консольного логирования
+   - `Microsoft.Extensions.Logging.Configuration` - конфигурация логирования
+
+## Конфигурационные файлы
+
+### appsettings.json
+Добавлена секция `Logging`:
+```json
+"Logging": {
+  "LogLevel": {
+    "Default": "Information",
+    "Microsoft": "Warning",
+    "Microsoft.Hosting.Lifetime": "Information",
+    "McpRag": "Information"
+  },
+  "File": {
+    "Path": "logs/app-",
+    "FileSizeLimitBytes": 10485760,
+    "RetainedFileCountLimit": 30,
+    "RollingInterval": "Day"
+  }
+}
+```
+
+### McpRag.csproj
+Добавлены NuGet-пакеты в `<ItemGroup>`:
+```xml
+<PackageReference Include="Serilog.AspNetCore" Version="8.0.1" />
+<PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+<PackageReference Include="Serilog.Sinks.Console" Version="5.0.1" />
+<PackageReference Include="Microsoft.Extensions.Logging.Configuration" Version="8.0.1" />
+```
+
+### Program.cs
+Настройка Serilog:
+```csharp
+using Serilog;
+using Serilog.Events;
+using Serilog.Formatting.Compact;
+
+// Configure Serilog for structured logging
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.Hosting.Lifetime", LogEventLevel.Information)
+    .MinimumLevel.Override("McpRag", LogEventLevel.Information)
+    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+    .WriteTo.File(
+        formatter: new CompactJsonFormatter(),
+        path: "logs/app-.log",
+        rollingInterval: RollingInterval.Day,
+        fileSizeLimitBytes: 10 * 1024 * 1024, // 10MB
+        retainedFileCountLimit: 30,
+        rollOnFileSizeLimit: true
+    )
+    .Enrich.FromLogContext()
+    .CreateLogger();
+
+builder.Logging.ClearProviders();
+builder.Logging.AddSerilog(Log.Logger);
+```
+
+## Функциональные возможности
+
+- **Ротация логов по дате**: Каждый день создается новый файл (например, `app-20241227.log`)
+- **Ограничение по размеру**: Каждый файл не превышает 10MB
+- **Очистка старых логов**: Автоматически удаляются логи старше 30 дней
+- **Структурированный формат**: Логи сохраняются в компактном JSON-формате
+- **Консольный вывод**: Логи также выводятся в консоль для удобства отладки
+- **Уровни логирования**: Поддержка всех стандартных уровней (Trace, Debug, Information, Warning, Error, Critical)
+
+## Путь к файлам логов
+
+Логи будут сохраняться в папке `logs/` рядом с исполняемым файлом. Файлы будут иметь имена вида `app-YYYYMMDD.log`.
+
+## Проверка результатов
+
+Проект успешно собирается. Логирование будет работать автоматически при запуске приложения. Логи можно будет найти в папке `logs/`, а также они будут выводиться в консоль.
+
+
+# Текущая работа search_docs
+
+## Проблема
+
+Инструмент `search_docs` в текущей реализации **не проверяет порог релевантности** найденных документов. Это означает, что он возвращает результаты даже если они очень слабо связаны с запросом.
+
+## Причина проблемы
+
+**В текущей реализации нет:**
+1. Проверки на **порог релевантности** (например, 0.7)
+2. Фильтрации результатов по расстоянию/релевантности
+3. Сообщения о том, что "информации нет" при низкой релевантности
+
+## Как работает сейчас
+
+### Реализация в SearchDocsTool.cs
+```csharp
+public async Task<string> SearchDocs(string query, int topK = 5, CancellationToken cancellationToken = default)
+{
+    var results = await _vectorStore.SearchAsync(query, topK, cancellationToken);
+    var resultsList = results.ToList();
+
+    if (!resultsList.Any())
+    {
+        return "❌ Не найдено релевантных документов по запросу.";
+    }
+
+    var response = new System.Text.StringBuilder();
+    response.AppendLine($"✅ Найдено {resultsList.Count} релевантных документов:");
+    // ... вывод результатов
+    return response.ToString();
+}
+```
+
+### Реализация в ChromaDbService.cs
+```csharp
+public async Task<IEnumerable<DocumentChunk>> SearchAsync(string query, int topK, CancellationToken cancellationToken = default)
+{
+    var queryEmbedding = await _ollama.GenerateEmbeddingsAsync(query, cancellationToken);
+    
+    var request = new {
+        query_embeddings = new[] { queryEmbedding },
+        n_results = topK
+    };
+    
+    var response = await _httpClient.PostAsync($"{_collectionsEndpoint}/{collectionId}/query", content, cancellationToken);
+    var searchResponse = JsonSerializer.Deserialize<ChromaSearchResult>(responseContent);
+    
+    return searchResponse.ToDocumentChunks();
+}
+```
+
+### Обработка расстояния в ChromaSearchResult
+```csharp
+// В ChromaSearchResult.ToDocumentChunks()
+chunk.Metadata["distance"] = i < queryDistances.Count ? queryDistances[i] : 0;
+```
+
+## Важные замечания
+
+1. **Distance vs Relevance**: ChromaDB возвращает **расстояние** (distance), а не релевантность (score)
+   - Чем меньше расстояние, тем лучше релевантность
+   - Обычно порог для "хороших" результатов: distance < 0.5
+
+2. **Нет фильтрации**: В текущем коде результаты **не фильтруются** по порогу
+3. **Нет визуальной индикации**: Пользователь не видит, насколько релевантны результаты
+
+## Вывод
+
+Инструмент `search_docs` работает **как простой векторный поиск** без проверки порога релевантности. Он всегда возвращает `topK` результатов, даже если они очень слабо связаны с запросом. Это может приводить к "ложным положительным" результатам.
+
+Для улучшения нужно добавить:
+1. Проверку порога релевантности (например, distance < 0.5)
+2. Отображение расстояния в результатах
+3. Сообщение о том, что "информации нет" при низкой релевантности
