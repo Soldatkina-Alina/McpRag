@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Protocol;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -129,31 +130,15 @@ public class ChromaDbService : IVectorStoreService
         }
 
         var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
-        var searchResponse = JsonSerializer.Deserialize<ChromaSearchResponse>(responseContent);
+        var searchResponse = JsonSerializer.Deserialize<ChromaSearchResult>(responseContent);
 
-        if (searchResponse == null || searchResponse.Results == null || !searchResponse.Results.Any())
+        if (searchResponse == null)
         {
             _logger.LogWarning("No search results found for query: {Query}", query);
             return Enumerable.Empty<DocumentChunk>();
         }
 
-        var results = searchResponse.Results.First();
-
-        var documentChunks = new List<DocumentChunk>();
-
-        for (int i = 0; i < results.Documents.Count; i++)
-        {
-            var metadata = results.Metadatas[i];
-            documentChunks.Add(new DocumentChunk
-            {
-                Id = results.Ids[i],
-                Text = results.Documents[i],
-                Source = metadata?["source"]?.ToString(),
-                ChunkIndex = metadata?["chunk_index"] != null ? int.Parse(metadata["chunk_index"].ToString()) : 0,
-                IndexedAt = DateTime.Parse(metadata?["indexed_at"]?.ToString() ?? DateTime.UtcNow.ToString()),
-                Metadata = metadata?.ToDictionary(x => x.Key, x => x.Value) ?? new()
-            });
-        }
+        var documentChunks = searchResponse.ToDocumentChunks();
 
         _logger.LogInformation("Found {Count} relevant document chunks for query: {Query}",
             documentChunks.Count, query);
@@ -377,26 +362,138 @@ public class ChromaSearchResponse
 /// </summary>
 public class ChromaSearchResult
 {
-    /// <summary>
-    /// Идентификаторы найденных документов.
-    /// </summary>
-    public List<string> Ids { get; set; } = new();
+    [JsonPropertyName("ids")]
+    public List<List<string>> Ids { get; set; }
 
-    /// <summary>
-    /// Тексты найденных документов.
-    /// </summary>
-    public List<string> Documents { get; set; } = new();
+    [JsonPropertyName("embeddings")]
+    public object Embeddings { get; set; } // может быть null
 
-    /// <summary>
-    /// Метаданные найденных документов.
-    /// </summary>
-    public List<Dictionary<string, object>> Metadatas { get; set; } = new();
+    [JsonPropertyName("documents")]
+    public List<List<string>> Documents { get; set; }
 
-    /// <summary>
-    /// Эмбеддинги найденных документов.
-    /// </summary>
-    public List<List<float>> Embeddings { get; set; } = new();
+    [JsonPropertyName("uris")]
+    public object Uris { get; set; } // может быть null
+
+    [JsonPropertyName("metadatas")]
+    public List<List<ChromaMetadata>> Metadatas { get; set; }
+
+    [JsonPropertyName("distances")]
+    public List<List<double>> Distances { get; set; }
+
+    [JsonPropertyName("include")]
+    public List<string> Include { get; set; }
+
+    // Преобразование в DocumentChunk
+    public List<DocumentChunk> ToDocumentChunks()
+    {
+        var chunks = new List<DocumentChunk>();
+
+        if (Ids == null || Ids.Count == 0)
+            return chunks;
+
+        for (int queryIndex = 0; queryIndex < Ids.Count; queryIndex++)
+        {
+            var queryIds = Ids[queryIndex];
+            var queryDocuments = Documents?[queryIndex] ?? new List<string>();
+            var queryMetadatas = Metadatas?[queryIndex] ?? new List<ChromaMetadata>();
+            var queryDistances = Distances?[queryIndex] ?? new List<double>();
+
+            for (int i = 0; i < queryIds.Count; i++)
+            {
+                var metadata = i < queryMetadatas.Count ? queryMetadatas[i] : null;
+
+                var chunk = new DocumentChunk
+                {
+                    // Используем ID из Chroma или генерируем новый
+                    Id = queryIds[i] ?? Guid.NewGuid().ToString(),
+
+                    // Текст документа
+                    Text = i < queryDocuments.Count ? queryDocuments[i] : null,
+
+                    // Источник (путь к файлу)
+                    Source = metadata?.Source ?? metadata?.FileName,
+
+                    // Индекс чанка
+                    ChunkIndex = metadata?.ChunkIndex ?? 0,
+
+                    // Время индексации
+                    IndexedAt = metadata?.IndexedAt ?? DateTime.UtcNow,
+
+                    // Embedding пока пустой (Chroma не возвращает embeddings по умолчанию)
+                    Embedding = null,
+
+                    // Дополнительные метаданные
+                    Metadata = new Dictionary<string, object>
+                    {
+                        ["distance"] = i < queryDistances.Count ? queryDistances[i] : 0,
+                        ["extension"] = metadata?.Extension,
+                        ["query_index"] = queryIndex,
+                        ["chroma_id"] = queryIds[i]
+                    }
+                };
+
+                // Добавляем все поля метаданных
+                if (metadata != null)
+                {
+                    chunk.Metadata["file_name"] = metadata.FileName;
+                    chunk.Metadata["indexed_at"] = metadata.IndexedAt;
+                    chunk.Metadata["chunk_index"] = metadata.ChunkIndex;
+                    chunk.Metadata["source"] = metadata.Source;
+                    chunk.Metadata["extension"] = metadata.Extension;
+                }
+
+                chunks.Add(chunk);
+            }
+        }
+
+        return chunks;
+    }
 }
+
+// Класс для метаданных
+public class ChromaMetadata
+{
+    [JsonPropertyName("indexed_at")]
+    public DateTime IndexedAt { get; set; }
+
+    [JsonPropertyName("file_name")]
+    public string FileName { get; set; }
+
+    [JsonPropertyName("chunk_index")]
+    public int ChunkIndex { get; set; }
+
+    [JsonPropertyName("source")]
+    public string Source { get; set; }
+
+    [JsonPropertyName("extension")]
+    public string Extension { get; set; }
+}
+
+// Класс для отдельного документа
+public class ChromaDocument
+{
+    public string Id { get; set; }
+    // Массив документов (в вашем случае там два одинаковых элемента)
+    public List<string> Documents { get; set; } = new List<string>();
+    public ChromaMetadata Metadata { get; set; }
+    public double Distance { get; set; }
+
+    // Для удобства - получить первый документ или объединенный текст
+    public string FirstDocument => Documents?.FirstOrDefault();
+    public string AllDocuments => Documents != null ? string.Join(" ", Documents) : "";
+
+    public override string ToString()
+    {
+        return $"ID: {Id}\n" +
+               $"Документов: {Documents?.Count ?? 0}\n" +
+               $"Первый документ: {FirstDocument?.Substring(0, Math.Min(50, FirstDocument?.Length ?? 0))}...\n" +
+               $"Расстояние: {Distance}\n" +
+               $"Файл: {Metadata?.FileName}\n" +
+               $"Индексирован: {Metadata?.IndexedAt}\n" +
+               $"Чанк: {Metadata?.ChunkIndex}\n";
+    }
+}
+
 
 /// <summary>
 /// Ответ от ChromaDB на запрос получения количества документов.
