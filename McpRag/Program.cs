@@ -54,6 +54,7 @@ builder.Services.AddSingleton<IIndexerService, IndexerService>();
 
 // Add RAG services
 builder.Services.AddSingleton<ContextFormatter>();
+builder.Services.AddScoped<IRagGraphService, RagGraphService>();
 
 // Add the MCP services: the transport to use (stdio) and the tools to register.
 builder.Services
