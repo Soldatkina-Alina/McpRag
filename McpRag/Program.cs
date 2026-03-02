@@ -45,6 +45,34 @@ builder.Services
 var host = builder.Build();
 
 var logger = host.Services.GetRequiredService<ILogger<Program>>();
-logger.LogInformation("Server started");
+logger.LogInformation("Checking services availability...");
+
+// Check Ollama availability
+try
+{
+    var ollamaService = host.Services.GetRequiredService<IOllamaService>();
+    await ollamaService.GenerateEmbeddingsAsync("test", default);
+    logger.LogInformation("Ollama service is available");
+}
+catch (Exception ex)
+{
+    logger.LogError("Ollama service is unavailable: {Error}", ex.Message);
+    return;
+}
+
+// Check ChromaDB availability
+try
+{
+    var vectorStore = host.Services.GetRequiredService<IVectorStoreService>();
+    await vectorStore.CountAsync(default);
+    logger.LogInformation("ChromaDB service is available");
+}
+catch (Exception ex)
+{
+    logger.LogError("ChromaDB service is unavailable: {Error}", ex.Message);
+    return;
+}
+
+logger.LogInformation("All services are available. Server started");
 
 await host.RunAsync();
