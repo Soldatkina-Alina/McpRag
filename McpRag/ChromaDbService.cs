@@ -163,6 +163,7 @@ public class ChromaDbService : IVectorStoreService
             return;
         }
 
+        // Delete all documents using empty where filter (supported in ChromaDB API)
         var request = new
         {
             where = new Dictionary<string, object>()

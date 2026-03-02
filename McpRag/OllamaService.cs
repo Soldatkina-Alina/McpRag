@@ -44,7 +44,9 @@ public class OllamaService : IOllamaService
     {
         try
         {
-            var response = await _httpClient.GetAsync("/api/health", cancellationToken);
+            // Ollama doesn't have a /api/health endpoint in all versions
+            // Check /api/tags instead which is more reliable
+            var response = await _httpClient.GetAsync("/api/tags", cancellationToken);
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex)

@@ -14,4 +14,14 @@ public interface IIndexerService
     /// Loads files from the specified folder with the given pattern.
     /// </summary>
     Task<List<FileContent>> LoadFilesAsync(string folderPath, string pattern, CancellationToken ct = default);
+    
+    /// <summary>
+    /// Returns the list of loaded files.
+    /// </summary>
+    List<FileContent> GetLoadedFiles();
+    
+    /// <summary>
+    /// Clears the list of loaded files.
+    /// </summary>
+    void ClearLoadedFiles();
 }

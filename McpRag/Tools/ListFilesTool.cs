@@ -6,9 +6,9 @@ using McpRag;
 public class ListFilesTool
 {
     private readonly ILogger<ListFilesTool> _logger;
-    private readonly IndexerService _indexerService;
+    private readonly IIndexerService _indexerService;
 
-    public ListFilesTool(ILogger<ListFilesTool> logger, IndexerService indexerService)
+    public ListFilesTool(ILogger<ListFilesTool> logger, IIndexerService indexerService)
     {
         _logger = logger;
         _indexerService = indexerService;

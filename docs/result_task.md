@@ -367,7 +367,7 @@ This technique is particularly useful for tasks like question answering, documen
 2. **Обновлены существующие файлы**:
    - `IOllamaService.cs` - добавлен метод `GenerateEmbeddingsAsync` для генерации эмбеддингов
    - `OllamaService.cs` - реализация метода генерации эмбеддингов через API Ollama /api/embeddings
-   - `OllamaEmbeddingResponse.cs` - модель для разбора ответа API Ollama о эмбеддингах
+   - `OllamaEmbeddingResponse.cs` - модель для разбора ответов API Ollama о эмбеддингах
    - `appsettings.json` - добавлены конфигурационные параметры для vector store
    - `IndexerService.cs` - обновлен для обработки и индексации содержимого файлов в ChromaDB
    - `VectorStoreStatusTool.cs` - новый инструмент для проверки статуса vector store
@@ -509,7 +509,7 @@ dotnet run
 2. **Добавлено файловое логирование с ротацией**: Логи теперь сохраняются в файлы с ротацией по дате
 3. **Добавлены NuGet-пакеты**:
    - `Serilog.AspNetCore` - интеграция Serilog с ASP.NET Core
-   - `Serilog.Sinks.File` - син크 для файлового логирования
+   - `Serilog.Sinks.File` - синк для файлового логирования
    - `Serilog.Sinks.Console` - синк для консольного логирования
    - `Microsoft.Extensions.Logging.Configuration` - конфигурация логирования
 
@@ -588,3 +588,80 @@ builder.Logging.AddSerilog(Log.Logger);
 ## Проверка результатов
 
 Проект успешно собирается. Логирование будет работать автоматически при запуске приложения. Логи можно будет найти в папке `logs/`, а также они будут выводиться в консоль.
+
+
+# Текущая работа search_docs
+
+## Проблема
+
+Инструмент `search_docs` в текущей реализации **не проверяет порог релевантности** найденных документов. Это означает, что он возвращает результаты даже если они очень слабо связаны с запросом.
+
+## Причина проблемы
+
+**В текущей реализации нет:**
+1. Проверки на **порог релевантности** (например, 0.7)
+2. Фильтрации результатов по расстоянию/релевантности
+3. Сообщения о том, что "информации нет" при низкой релевантности
+
+## Как работает сейчас
+
+### Реализация в SearchDocsTool.cs
+```csharp
+public async Task<string> SearchDocs(string query, int topK = 5, CancellationToken cancellationToken = default)
+{
+    var results = await _vectorStore.SearchAsync(query, topK, cancellationToken);
+    var resultsList = results.ToList();
+
+    if (!resultsList.Any())
+    {
+        return "❌ Не найдено релевантных документов по запросу.";
+    }
+
+    var response = new System.Text.StringBuilder();
+    response.AppendLine($"✅ Найдено {resultsList.Count} релевантных документов:");
+    // ... вывод результатов
+    return response.ToString();
+}
+```
+
+### Реализация в ChromaDbService.cs
+```csharp
+public async Task<IEnumerable<DocumentChunk>> SearchAsync(string query, int topK, CancellationToken cancellationToken = default)
+{
+    var queryEmbedding = await _ollama.GenerateEmbeddingsAsync(query, cancellationToken);
+    
+    var request = new {
+        query_embeddings = new[] { queryEmbedding },
+        n_results = topK
+    };
+    
+    var response = await _httpClient.PostAsync($"{_collectionsEndpoint}/{collectionId}/query", content, cancellationToken);
+    var searchResponse = JsonSerializer.Deserialize<ChromaSearchResult>(responseContent);
+    
+    return searchResponse.ToDocumentChunks();
+}
+```
+
+### Обработка расстояния в ChromaSearchResult
+```csharp
+// В ChromaSearchResult.ToDocumentChunks()
+chunk.Metadata["distance"] = i < queryDistances.Count ? queryDistances[i] : 0;
+```
+
+## Важные замечания
+
+1. **Distance vs Relevance**: ChromaDB возвращает **расстояние** (distance), а не релевантность (score)
+   - Чем меньше расстояние, тем лучше релевантность
+   - Обычно порог для "хороших" результатов: distance < 0.5
+
+2. **Нет фильтрации**: В текущем коде результаты **не фильтруются** по порогу
+3. **Нет визуальной индикации**: Пользователь не видит, насколько релевантны результаты
+
+## Вывод
+
+Инструмент `search_docs` работает **как простой векторный поиск** без проверки порога релевантности. Он всегда возвращает `topK` результатов, даже если они очень слабо связаны с запросом. Это может приводить к "ложным положительным" результатам.
+
+Для улучшения нужно добавить:
+1. Проверку порога релевантности (например, distance < 0.5)
+2. Отображение расстояния в результатах
+3. Сообщение о том, что "информации нет" при низкой релевантности

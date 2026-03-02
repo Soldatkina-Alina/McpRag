@@ -162,6 +162,63 @@ public class IndexFolderIntegrationTests
     }
     
     /// <summary>
+    /// Проверяет работу ListFiles - вызов метода с фильтрацией по расширению.
+    /// </summary>
+    [Fact]
+    public async Task ListFiles_BasicFunctionality()
+    {
+        // Arrange
+        var testFolder = "C:\\test_docs";
+        
+        var indexerLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<IndexerService>();
+        var chromaLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ChromaDbService>();
+        var config = Options.Create(new IndexerConfig());
+        
+        var httpClient = new HttpClient { BaseAddress = new System.Uri("http://localhost:8000") };
+        var chromaDbService = new ChromaDbService(httpClient, CreateMockOllamaService().Object, chromaLogger);
+        
+        var indexerService = new IndexerService(config, chromaDbService, CreateMockOllamaService().Object, indexerLogger);
+        var toolsLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ListFilesTool>();
+        var listFilesTool = new ListFilesTool(toolsLogger, indexerService);
+        
+        // Act - Load files first to ensure we have something to list
+        await indexerService.LoadFilesAsync(testFolder, "*.txt");
+        var result = listFilesTool.ListFiles();
+        
+        // Assert
+        Assert.False(string.IsNullOrEmpty(result));
+        Assert.DoesNotContain("Нет загруженных файлов", result);
+    }
+    
+    /// <summary>
+    /// Проверяет работу ListFiles с фильтрацией по расширению.
+    /// </summary>
+    [Fact]
+    public async Task ListFiles_WithExtensionFilter()
+    {
+        // Arrange
+        var testFolder = "C:\\test_docs";
+        
+        var indexerLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<IndexerService>();
+        var chromaLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ChromaDbService>();
+        var config = Options.Create(new IndexerConfig());
+        
+        var httpClient = new HttpClient { BaseAddress = new System.Uri("http://localhost:8000") };
+        var chromaDbService = new ChromaDbService(httpClient, CreateMockOllamaService().Object, chromaLogger);
+        
+        var indexerService = new IndexerService(config, chromaDbService, CreateMockOllamaService().Object, indexerLogger);
+        var toolsLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ListFilesTool>();
+        var listFilesTool = new ListFilesTool(toolsLogger, indexerService);
+        
+        // Act - Load files first to ensure we have something to list
+        await indexerService.LoadFilesAsync(testFolder, "*.*");
+        var result = listFilesTool.ListFiles(".txt");
+        
+        // Assert
+        Assert.False(string.IsNullOrEmpty(result));
+    }
+    
+    /// <summary>
     /// Создает мок для OllamaService.
     /// </summary>
     private static Moq.Mock<IOllamaService> CreateMockOllamaService()
