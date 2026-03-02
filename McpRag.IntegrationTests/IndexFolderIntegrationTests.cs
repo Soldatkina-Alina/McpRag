@@ -219,6 +219,106 @@ public class IndexFolderIntegrationTests
     }
     
     /// <summary>
+    /// Проверяет работу ClearVectorStore - очищает векторное хранилище и проверяет, что оно пустое.
+    /// </summary>
+    [Fact]
+    public async Task ClearVectorStore_ShouldClearAllDocuments()
+    {
+        // Arrange
+        var logger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ChromaDbService>();
+        
+        // Создаем реальный HttpClient для ChromaDB
+        var httpClient = new HttpClient 
+        { 
+            BaseAddress = new Uri("http://localhost:8000"),
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+        
+        // Создаем реальный HttpClient для Ollama
+        var ollamaHttpClient = new HttpClient();
+        var ollamaLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<OllamaService>();
+        var ollamaConfig = Options.Create(new OllamaConfig
+        {
+            BaseUrl = "http://localhost:11434",
+            EmbeddingModel = "nomic-embed-text",
+            Model = "phi3:mini",
+            TimeoutSeconds = 30
+        });
+        var ollamaService = new OllamaService(ollamaHttpClient, ollamaConfig, ollamaLogger);
+        
+        var chromaDbService = new ChromaDbService(httpClient, ollamaService, logger);
+        
+        // Создаем тестовые данные с реальными эмбеддингами
+        var testChunks = new[]
+        {
+            new DocumentChunk
+            {
+                Id = Guid.NewGuid().ToString(),
+                Text = "Тестовый документ для проверки очистки хранилища",
+                Source = "test_clear.txt",
+                ChunkIndex = 0,
+                IndexedAt = DateTime.Now
+            }
+        };
+        
+        // Генерируем эмбеддинги для тестовых данных
+        var chunksWithEmbeddings = new List<DocumentChunk>();
+        foreach (var chunk in testChunks)
+        {
+            var embedding = await ollamaService.GenerateEmbeddingsAsync(chunk.Text);
+            chunksWithEmbeddings.Add(new DocumentChunk
+            {
+                Id = chunk.Id,
+                Text = chunk.Text,
+                Source = chunk.Source,
+                ChunkIndex = chunk.ChunkIndex,
+                IndexedAt = chunk.IndexedAt,
+                Embedding = embedding
+            });
+        }
+        
+        // Act - выполняем реальные операции
+        try
+        {
+            // Добавление тестовых данных для очистки
+            await chromaDbService.AddDocumentsAsync(chunksWithEmbeddings);
+
+            // Проверка, что документы добавлены
+            var countBeforeClear = await chromaDbService.CountAsync();
+            Console.WriteLine($"Количество документов перед очисткой: {countBeforeClear}");
+
+            // Создание инструмента для очистки
+            var vectorStoreStatusLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<VectorStoreStatusTool>();
+            var vectorStoreStatusTool = new VectorStoreStatusTool(chromaDbService, vectorStoreStatusLogger);
+            
+            // Очистка векторного хранилища
+            var clearResult = await vectorStoreStatusTool.ClearVectorStore();
+            Console.WriteLine($"Результат очистки: {clearResult}");
+            
+            // Проверка, что хранилище пустое
+            var countAfterClear = await chromaDbService.CountAsync();
+            Console.WriteLine($"Количество документов после очистки: {countAfterClear}");
+            
+            // Assert - проверки
+            Assert.Equal("✅ Векторное хранилище успешно очищено", clearResult);
+            Assert.Equal(0, countAfterClear);
+            
+            Console.WriteLine("Тестирование ClearVectorStore завершено успешно!");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка при тестировании ClearVectorStore: {ex.Message}");
+            if (ex.InnerException != null)
+            {
+                Console.WriteLine($"Внутренняя ошибка: {ex.InnerException.Message}");
+            }
+            Console.WriteLine($"Стек вызовов: {ex.StackTrace}");
+            
+            Assert.Fail($"Тест провален: {ex.Message}");
+        }
+    }
+    
+    /// <summary>
     /// Создает мок для OllamaService.
     /// </summary>
     private static Moq.Mock<IOllamaService> CreateMockOllamaService()

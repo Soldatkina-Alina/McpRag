@@ -67,10 +67,40 @@ public class ChromaDbServiceTests
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(new HttpResponseMessage
+            .ReturnsAsync((HttpRequestMessage req, CancellationToken ct) =>
             {
-                StatusCode = HttpStatusCode.OK,
-                Content = new StringContent("{}")
+                if (req.RequestUri.AbsolutePath.EndsWith("/collections"))
+                {
+                    var collections = new List<ChromaCollection>
+                    {
+                        new ChromaCollection
+                        {
+                            Id = "1",
+                            Name = "documents",
+                            Metadata = new Dictionary<string, object>(),
+                            Tenant = "default_tenant",
+                            Database = "default_database"
+                        }
+                    };
+                    return new HttpResponseMessage
+                    {
+                        StatusCode = HttpStatusCode.OK,
+                        Content = new StringContent(JsonSerializer.Serialize(collections))
+                    };
+                }
+                else if (req.RequestUri.AbsolutePath.Contains("/add"))
+                {
+                    return new HttpResponseMessage
+                    {
+                        StatusCode = HttpStatusCode.OK,
+                        Content = new StringContent("{}")
+                    };
+                }
+                return new HttpResponseMessage
+                {
+                    StatusCode = HttpStatusCode.NotFound,
+                    Content = new StringContent("{}")
+                };
             });
 
         // Act
@@ -79,7 +109,7 @@ public class ChromaDbServiceTests
         // Assert
         _httpHandlerMock.Protected().Verify(
             "SendAsync",
-            Times.Once(),
+            Times.Once(), // Once to add documents (get collections is separate verify)
             ItExpr.Is<HttpRequestMessage>(req => req.Method == HttpMethod.Post && req.RequestUri.AbsolutePath.Contains("/add")),
             ItExpr.IsAny<CancellationToken>());
     }
@@ -97,26 +127,23 @@ public class ChromaDbServiceTests
         _ollamaMock.Setup(x => x.GenerateEmbeddingsAsync(query, CancellationToken.None))
             .ReturnsAsync(queryEmbedding);
 
-        var searchResponse = new ChromaSearchResponse
+        var searchResponse = new ChromaSearchResult
         {
-            Results = new List<ChromaSearchResult>
+            Ids = new List<List<string>> { new List<string> { "1" } },
+            Documents = new List<List<string>> { new List<string> { "Test document" } },
+            Metadatas = new List<List<ChromaMetadata>>
             {
-                new ChromaSearchResult
+                new List<ChromaMetadata>
                 {
-                    Ids = new List<string> { "1" },
-                    Documents = new List<string> { "Test document" },
-                    Metadatas = new List<Dictionary<string, object>>
+                    new ChromaMetadata
                     {
-                        new Dictionary<string, object>
-                        {
-                            { "source", "test1.txt" },
-                            { "chunk_index", "0" },
-                            { "indexed_at", System.DateTime.UtcNow.ToString("o") }
-                        }
-                    },
-                    Embeddings = new List<List<float>> { new List<float> { 0.1f, 0.2f, 0.3f } }
+                        Source = "test1.txt",
+                        ChunkIndex = 0,
+                        IndexedAt = System.DateTime.UtcNow
+                    }
                 }
-            }
+            },
+            Embeddings = new List<List<float>> { new List<float> { 0.1f, 0.2f, 0.3f } }
         };
 
         _httpHandlerMock.Protected()
@@ -124,10 +151,40 @@ public class ChromaDbServiceTests
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(new HttpResponseMessage
+            .ReturnsAsync((HttpRequestMessage req, CancellationToken ct) =>
             {
-                StatusCode = HttpStatusCode.OK,
-                Content = new StringContent(JsonSerializer.Serialize(searchResponse))
+                if (req.RequestUri.AbsolutePath.EndsWith("/collections"))
+                {
+                    var collections = new List<ChromaCollection>
+                    {
+                        new ChromaCollection
+                        {
+                            Id = "1",
+                            Name = "documents",
+                            Metadata = new Dictionary<string, object>(),
+                            Tenant = "default_tenant",
+                            Database = "default_database"
+                        }
+                    };
+                    return new HttpResponseMessage
+                    {
+                        StatusCode = HttpStatusCode.OK,
+                        Content = new StringContent(JsonSerializer.Serialize(collections))
+                    };
+                }
+                else if (req.RequestUri.AbsolutePath.Contains("/query"))
+                {
+                    return new HttpResponseMessage
+                    {
+                        StatusCode = HttpStatusCode.OK,
+                        Content = new StringContent(JsonSerializer.Serialize(searchResponse))
+                    };
+                }
+                return new HttpResponseMessage
+                {
+                    StatusCode = HttpStatusCode.NotFound,
+                    Content = new StringContent("{}")
+                };
             });
 
         // Act
@@ -141,21 +198,61 @@ public class ChromaDbServiceTests
 
     /// <summary>
     /// Проверяет, что метод ClearAsync корректно отправляет запрос на очистку всех документов в ChromaDB.
-    /// Убеждается, что запрос отправляется один раз и содержит правильные параметры.
+    /// Убеждается, что запрос отправляется дважды: один раз для получения всех документов, второй для удаления.
     /// </summary>
     [Fact]
     public async Task ClearAsync_ShouldClearAllDocuments()
     {
         // Arrange
+        var getResponse = new { ids = new[] { "1", "2", "3" }, documents = new[] { "doc1", "doc2", "doc3" } };
+        
         _httpHandlerMock.Protected()
             .Setup<Task<HttpResponseMessage>>(
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(new HttpResponseMessage
+            .ReturnsAsync((HttpRequestMessage req, CancellationToken ct) =>
             {
-                StatusCode = HttpStatusCode.OK,
-                Content = new StringContent("{}")
+                if (req.RequestUri.AbsolutePath.EndsWith("/collections"))
+                {
+                    var collections = new List<ChromaCollection>
+                    {
+                        new ChromaCollection
+                        {
+                            Id = "1",
+                            Name = "documents",
+                            Metadata = new Dictionary<string, object>(),
+                            Tenant = "default_tenant",
+                            Database = "default_database"
+                        }
+                    };
+                    return new HttpResponseMessage
+                    {
+                        StatusCode = HttpStatusCode.OK,
+                        Content = new StringContent(JsonSerializer.Serialize(collections))
+                    };
+                }
+                else if (req.RequestUri.AbsolutePath.Contains("/get"))
+                {
+                    return new HttpResponseMessage
+                    {
+                        StatusCode = HttpStatusCode.OK,
+                        Content = new StringContent(JsonSerializer.Serialize(getResponse))
+                    };
+                }
+                else if (req.RequestUri.AbsolutePath.Contains("/delete"))
+                {
+                    return new HttpResponseMessage
+                    {
+                        StatusCode = HttpStatusCode.OK,
+                        Content = new StringContent("{}")
+                    };
+                }
+                return new HttpResponseMessage
+                {
+                    StatusCode = HttpStatusCode.NotFound,
+                    Content = new StringContent("{}")
+                };
             });
 
         // Act
@@ -164,8 +261,8 @@ public class ChromaDbServiceTests
         // Assert
         _httpHandlerMock.Protected().Verify(
             "SendAsync",
-            Times.Once(),
-            ItExpr.Is<HttpRequestMessage>(req => req.Method == HttpMethod.Post && req.RequestUri.AbsolutePath.Contains("/delete")),
+            Times.Exactly(3), // Once to get collections, once to get all documents, once to delete them
+            ItExpr.IsAny<HttpRequestMessage>(),
             ItExpr.IsAny<CancellationToken>());
     }
 
@@ -184,10 +281,40 @@ public class ChromaDbServiceTests
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
-            .ReturnsAsync(new HttpResponseMessage
+            .ReturnsAsync((HttpRequestMessage req, CancellationToken ct) =>
             {
-                StatusCode = HttpStatusCode.OK,
-                Content = new StringContent(JsonSerializer.Serialize(countResponse))
+                if (req.RequestUri.AbsolutePath.EndsWith("/collections"))
+                {
+                    var collections = new List<ChromaCollection>
+                    {
+                        new ChromaCollection
+                        {
+                            Id = "1",
+                            Name = "documents",
+                            Metadata = new Dictionary<string, object>(),
+                            Tenant = "default_tenant",
+                            Database = "default_database"
+                        }
+                    };
+                    return new HttpResponseMessage
+                    {
+                        StatusCode = HttpStatusCode.OK,
+                        Content = new StringContent(JsonSerializer.Serialize(collections))
+                    };
+                }
+                else if (req.RequestUri.AbsolutePath.Contains("/count"))
+                {
+                    return new HttpResponseMessage
+                    {
+                        StatusCode = HttpStatusCode.OK,
+                        Content = new StringContent(JsonSerializer.Serialize(countResponse))
+                    };
+                }
+                return new HttpResponseMessage
+                {
+                    StatusCode = HttpStatusCode.NotFound,
+                    Content = new StringContent("{}")
+                };
             });
 
         // Act

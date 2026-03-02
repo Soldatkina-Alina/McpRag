@@ -163,26 +163,58 @@ public class ChromaDbService : IVectorStoreService
             return;
         }
 
-        // Delete all documents using empty where filter (supported in ChromaDB API)
-        var request = new
+        // Get all document IDs first, then delete them
+        var allDocsRequest = new { }; // Empty request to get all documents
+        var allDocsJson = JsonSerializer.Serialize(allDocsRequest);
+        var allDocsContent = new StringContent(allDocsJson, System.Text.Encoding.UTF8, "application/json");
+        
+        var allDocsResponse = await _httpClient.PostAsync($"{_collectionsEndpoint}/{collectionId}/get", allDocsContent, cancellationToken);
+        
+        if (!allDocsResponse.IsSuccessStatusCode)
         {
-            where = new Dictionary<string, object>()
-        };
-
-        var json = JsonSerializer.Serialize(request);
-        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-
-        var response = await _httpClient.PostAsync($"{_collectionsEndpoint}/{collectionId}/delete", content, cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
+            var errorContent = await allDocsResponse.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogError("Failed to get all documents for clearing: {StatusCode} - {Content}",
+                allDocsResponse.StatusCode, errorContent);
+            throw new HttpRequestException($"Failed to get documents: {allDocsResponse.StatusCode} - {errorContent}");
+        }
+        
+        var allDocsResult = await allDocsResponse.Content.ReadAsStringAsync(cancellationToken);
+        var getResponse = JsonDocument.Parse(allDocsResult);
+        var ids = new List<string>();
+        
+        if (getResponse.RootElement.TryGetProperty("ids", out var idsElement) && idsElement.ValueKind == JsonValueKind.Array)
         {
-            var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("Failed to clear ChromaDB collection: {StatusCode} - {Content}",
-                response.StatusCode, errorContent);
-            throw new HttpRequestException($"Failed to clear collection: {response.StatusCode} - {errorContent}");
+            foreach (var idElement in idsElement.EnumerateArray())
+            {
+                if (idElement.ValueKind == JsonValueKind.String)
+                {
+                    ids.Add(idElement.GetString());
+                }
+            }
         }
 
-        _logger.LogInformation("Successfully cleared all documents from ChromaDB collection");
+        if (ids.Count == 0)
+        {
+            _logger.LogInformation("Collection {Collection} is already empty", _collectionName);
+            return;
+        }
+
+        // Delete all documents by IDs
+        var deleteRequest = new { ids = ids };
+        var deleteJson = JsonSerializer.Serialize(deleteRequest);
+        var deleteContent = new StringContent(deleteJson, System.Text.Encoding.UTF8, "application/json");
+
+        var deleteResponse = await _httpClient.PostAsync($"{_collectionsEndpoint}/{collectionId}/delete", deleteContent, cancellationToken);
+
+        if (!deleteResponse.IsSuccessStatusCode)
+        {
+            var errorContent = await deleteResponse.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogError("Failed to clear ChromaDB collection: {StatusCode} - {Content}",
+                deleteResponse.StatusCode, errorContent);
+            throw new HttpRequestException($"Failed to clear collection: {deleteResponse.StatusCode} - {errorContent}");
+        }
+
+        _logger.LogInformation("Successfully cleared all documents from ChromaDB collection: {Count} documents deleted", ids.Count);
     }
 
     /// <summary>
