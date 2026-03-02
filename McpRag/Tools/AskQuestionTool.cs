@@ -13,7 +13,7 @@ namespace McpRag.Tools
     /// <summary>
     /// Инструмент для получения ответов на вопросы из базы знаний с использованием RAG.
     /// </summary>
-    internal class AskQuestionTool
+    public class AskQuestionTool
     {
         private readonly IRagGraphService _ragGraph;
         private readonly RAGConfig _config;
@@ -76,7 +76,10 @@ namespace McpRag.Tools
                 {
                     var gradeStep = state.ExecutionSteps.First(s => s.NodeName == "GradeDocuments");
                     result.AppendLine();
-                    result.AppendLine($"📊 **Оценка релевантности:** {gradeStep.Metadata["relevant_after_grade"]}/{gradeStep.Metadata["total_docs"]} документов");
+                    if (gradeStep.Metadata.ContainsKey("relevant_after_grade") && gradeStep.Metadata.ContainsKey("total_docs"))
+                    {
+                        result.AppendLine($"📊 **Оценка релевантности:** {gradeStep.Metadata["relevant_after_grade"]}/{gradeStep.Metadata["total_docs"]} документов");
+                    }
                     if (gradeStep.Metadata.ContainsKey("grade_errors"))
                     {
                         result.AppendLine($"   *Ошибок оценки: {gradeStep.Metadata["grade_errors"]}*");
