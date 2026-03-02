@@ -49,56 +49,68 @@ public class RagGraphService : IRagGraphService
     /// <returns>Состояние графа RAG.</returns>
     public async Task<RagState> ExecuteAsync(string question, CancellationToken ct)
     {
-        var state = new RagState(_config) { Question = question };
+        var state = new RagState(_config) 
+        { 
+            Question = question,
+            CurrentQuery = question,
+            CurrentScoreThreshold = _config.Value.MinRelevanceScore
+        };
         
         try
         {
-            // Узел 1: Поиск документов
-            state = await SearchNodeAsync(state, ct);
-            
-            // Проверка релевантности - установим все документы как релевантные для тестов
-            foreach (var doc in state.Documents)
+            // Шаг 1: Rewrite (улучшаем запрос перед первым поиском)
+            if (_config.Value.Retry.EnableQueryRewrite)
             {
-                doc.Score = 0.9f;
-                doc.IsRelevant = true;
+                state = await RewriteQueryNodeAsync(state, ct);
             }
             
-            // Пропускаем проверку порога релевантности для тестов
-            if (!state.HasRelevantDocuments || state.Documents.Count == 0)
+            // Начало retry-цикла
+            while (state.RetryCount <= _config.Value.Retry.MaxRetries)
             {
-                var maxScore = state.Documents.FirstOrDefault()?.Score ?? 0;
-                state.Answer = $"❌ В предоставленных документах не найдено информации.\n" +
-                               $"Наиболее похожие документы имеют релевантность {maxScore:P1}, " +
-                               $"что ниже порога {_config.Value.MinRelevanceScore:P1}.";
+                // Шаг 2: Search с текущим запросом
+                state = await SearchNodeAsync(state, ct);
                 
-                state.ExecutionSteps.Add(new ExecutionStep 
-                { 
-                    NodeName = "NoRelevantDocs",
-                    Metadata = new Dictionary<string, object>
-                    {
-                        ["max_score"] = maxScore,
-                        ["threshold"] = _config.Value.MinRelevanceScore,
-                        ["total_chunks"] = state.Documents.Count
-                    }
-                });
-                return state;
-            }
-
-            // Узел 2: Оценка релевантности через LLM
-            if (state.Documents.Any())
-            {
+                // Шаг 3: GradeDocuments (из Задачи 10)
                 state = await GradeDocumentsNodeAsync(state, ct);
                 
-                if (!state.HasRelevantDocuments)
+                // Проверка: достаточно ли документов?
+                if (HasEnoughRelevantDocuments(state))
                 {
-                    state.Answer = $"❌ После оценки релевантности не найдено подходящих документов.\n" +
-                                   $"Порог ChromaDB: {_config.Value.MinRelevanceScore:P1}, " +
-                                   $"порог LLM: {_config.Value.GradeDocuments.LLMThreshold:P1}";
-                    return state;
+                    break; // достаточно - выходим из цикла
+                }
+                
+                // Если есть еще попытки - расширяем запрос
+                if (state.RetryCount < _config.Value.Retry.MaxRetries)
+                {
+                    state = await BroadenQueryNodeAsync(state, ct);
+                    // Продолжаем цикл
+                }
+                else
+                {
+                    // Достигнут лимит попыток
+                    state.ExecutionSteps.Add(new ExecutionStep 
+                    { 
+                        NodeName = "MaxRetriesReached",
+                        Metadata = new Dictionary<string, object>
+                        {
+                            ["max_retries"] = _config.Value.Retry.MaxRetries,
+                            ["relevant_found"] = state.Documents.Count(d => d.IsRelevant)
+                        }
+                    });
+                    break;
                 }
             }
             
-            // Узел 3: Генерация ответа
+            // Если после всех попыток нет релевантных документов
+            if (!state.Documents.Any(d => d.IsRelevant))
+            {
+                state.Answer = $"❌ После {state.RetryCount + 1} попыток не найдено релевантных документов.\n" +
+                               $"Последний запрос: '{state.CurrentQuery}'\n" +
+                               $"История запросов: {string.Join(" → ", state.QueryHistory)}";
+                return state;
+            }
+            
+            // Шаг 4: Generate (из Задачи 9)
             state = await GenerateNodeAsync(state, ct);
             
             return state;
@@ -118,6 +130,119 @@ public class RagGraphService : IRagGraphService
     }
 
     /// <summary>
+    /// Узел графа для перезаписи запроса.
+    /// </summary>
+    /// <param name="state">Состояние графа.</param>
+    /// <param name="ct">Токен отмены.</param>
+    /// <returns>Обновленное состояние графа.</returns>
+    private async Task<RagState> RewriteQueryNodeAsync(RagState state, CancellationToken ct)
+    {
+        var step = new ExecutionStep { NodeName = "RewriteQuery" };
+        
+        try
+        {
+            var prompt = $@"
+Ты - эксперт по улучшению поисковых запросов для RAG системы.
+Исходный запрос пользователя: {state.Question}
+
+Твоя задача: перепиши запрос так, чтобы он лучше подходил для поиска релевантных документов.
+- Используй более точные термины
+- Добавь важные ключевые слова
+- Сохрани исходный смысл
+- Ответь ТОЛЬКО улучшенным запросом, без пояснений
+
+Улучшенный запрос:";
+            
+            var rewritten = await _ollama.GenerateAsync(prompt, ct);
+            state.CurrentQuery = rewritten.Trim();
+            state.QueryHistory.Add(rewritten.Trim());
+            
+            step.Metadata["original"] = state.Question;
+            step.Metadata["rewritten"] = state.CurrentQuery;
+        }
+        catch (Exception ex)
+        {
+            step.Metadata["error"] = ex.Message;
+            state.CurrentQuery = state.Question; // fallback к исходному
+        }
+        finally
+        {
+            state.ExecutionSteps.Add(step);
+        }
+        
+        return state;
+    }
+
+    /// <summary>
+    /// Узел графа для расширения запроса.
+    /// </summary>
+    /// <param name="state">Состояние графа.</param>
+    /// <param name="ct">Токен отмены.</param>
+    /// <returns>Обновленное состояние графа.</returns>
+    private async Task<RagState> BroadenQueryNodeAsync(RagState state, CancellationToken ct)
+    {
+        var step = new ExecutionStep { NodeName = "BroadenQuery" };
+        
+        try
+        {
+            var prompt = $@"
+Ты - эксперт по расширению поисковых запросов.
+Текущий запрос: {state.CurrentQuery}
+
+Найдено недостаточно релевантных документов.
+Расширь запрос, чтобы найти больше информации:
+- Добавь синонимы
+- Используй более общие термины
+- Включи связанные понятия
+
+Ответь ТОЛЬКО расширенным запросом, без пояснений.
+
+Расширенный запрос:";
+            
+            var broadened = await _ollama.GenerateAsync(prompt, ct);
+            state.CurrentQuery = broadened.Trim();
+            state.QueryHistory.Add(broadened.Trim());
+            state.RetryCount++;
+            
+            // Динамически снижаем порог релевантности при каждой попытке
+            state.CurrentScoreThreshold = _config.Value.MinRelevanceScore * 
+                                         (1 - _config.Value.Retry.ScoreBoostPerRetry * state.RetryCount);
+            
+            step.Metadata["previous_query"] = state.QueryHistory[^2];
+            step.Metadata["broadened_query"] = state.CurrentQuery;
+            step.Metadata["retry_count"] = state.RetryCount;
+            step.Metadata["new_threshold"] = state.CurrentScoreThreshold;
+        }
+        catch (Exception ex)
+        {
+            step.Metadata["error"] = ex.Message;
+            // при ошибке оставляем тот же запрос
+        }
+        finally
+        {
+            state.ExecutionSteps.Add(step);
+        }
+        
+        return state;
+    }
+
+    /// <summary>
+    /// Проверяет, достаточно ли релевантных документов.
+    /// </summary>
+    /// <param name="state">Состояние графа.</param>
+    /// <returns>True, если количество релевантных документов достаточно.</returns>
+    private bool HasEnoughRelevantDocuments(RagState state)
+    {
+        var config = _config.Value.Retry;
+        
+        // Используем динамический порог и счетчик релевантных
+        var relevantCount = state.Documents.Count(d => 
+            d.IsRelevant && d.Score >= state.CurrentScoreThreshold);
+        
+        return relevantCount >= config.MinRelevantCount;
+    }
+
+    /// <summary>
     /// Узел графа для поиска документов.
     /// </summary>
     /// <param name="state">Состояние графа.</param>
@@ -130,7 +255,7 @@ public class RagGraphService : IRagGraphService
         try
         {
             var results = await _vectorStore.SearchWithScoreAsync(
-                state.Question, 
+                state.CurrentQuery ?? state.Question, 
                 _config.Value.MaxChunks, 
                 ct);
             
@@ -140,9 +265,9 @@ public class RagGraphService : IRagGraphService
                 return r.Chunk;
             }).ToList();
             
+            step.Metadata["query_used"] = state.CurrentQuery;
             step.Metadata["chunks_found"] = state.Documents.Count;
-            step.Metadata["max_score"] = state.Documents.FirstOrDefault()?.Score ?? 0;
-            step.Metadata["threshold"] = _config.Value.MinRelevanceScore;
+            step.Metadata["retry_count"] = state.RetryCount;
         }
         catch (Exception ex)
         {

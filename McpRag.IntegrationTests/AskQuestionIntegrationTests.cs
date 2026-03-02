@@ -50,7 +50,7 @@ public class AskQuestionIntegrationTests
         var ragConfig = Options.Create(new RAGConfig
         {
             MaxChunks = 5,
-            MinRelevanceScore = 0.5, // Более лояльный порог
+            MinRelevanceScore = 0.5f, // Более лояльный порог
             MaxContextTokens = 2000,
             IncludeMetadataInContext = true,
             GradeDocuments = new GradeDocumentsConfig
@@ -141,7 +141,7 @@ public class AskQuestionIntegrationTests
         var ragConfig = Options.Create(new RAGConfig
         {
             MaxChunks = 5,
-            MinRelevanceScore = 0.5, // Более лояльный порог
+            MinRelevanceScore = 0.5f, // Более лояльный порог
             MaxContextTokens = 2000,
             IncludeMetadataInContext = true,
             GradeDocuments = new GradeDocumentsConfig
@@ -233,7 +233,7 @@ public class AskQuestionIntegrationTests
         var ragConfig = Options.Create(new RAGConfig
         {
             MaxChunks = 5,
-            MinRelevanceScore = 0.5, // Более лояльный порог
+            MinRelevanceScore = 0.5f, // Более лояльный порог
             MaxContextTokens = 2000,
             IncludeMetadataInContext = true,
             GradeDocuments = new GradeDocumentsConfig
@@ -323,7 +323,7 @@ public class AskQuestionIntegrationTests
         var ragConfig = Options.Create(new RAGConfig
         {
             MaxChunks = 5,
-            MinRelevanceScore = 0.5, // Более лояльный порог
+            MinRelevanceScore = 0.5f, // Более лояльный порог
             MaxContextTokens = 2000,
             IncludeMetadataInContext = true,
             GradeDocuments = new GradeDocumentsConfig

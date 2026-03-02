@@ -86,6 +86,16 @@ namespace McpRag.Tools
                     }
                 }
                 
+                if (state.QueryHistory.Any())
+                {
+                    result.AppendLine();
+                    result.AppendLine("📝 **История запросов:**");
+                    for (int i = 0; i < state.QueryHistory.Count; i++)
+                    {
+                        result.AppendLine($"  {i + 1}. {state.QueryHistory[i]}");
+                    }
+                }
+                
                 if (state.Documents.Any())
                 {
                     var sources = state.Documents

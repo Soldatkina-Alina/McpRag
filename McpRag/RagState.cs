@@ -20,6 +20,7 @@ public class RagState
         _config = config.Value;
         Documents = new List<DocumentChunk>();
         ExecutionSteps = new List<ExecutionStep>();
+        QueryHistory = new List<string>();
     }
 
     /// <summary>
@@ -51,6 +52,26 @@ public class RagState
     /// Сообщение об ошибке.
     /// </summary>
     public string ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Текущий поисковый запрос (может быть переписан или расширен).
+    /// </summary>
+    public string CurrentQuery { get; set; }
+
+    /// <summary>
+    /// История запросов (исходный + все варианты).
+    /// </summary>
+    public List<string> QueryHistory { get; set; }
+
+    /// <summary>
+    /// Количество попыток поиска.
+    /// </summary>
+    public int RetryCount { get; set; }
+
+    /// <summary>
+    /// Динамический порог релевантности для текущей попытки.
+    /// </summary>
+    public float CurrentScoreThreshold { get; set; }
 
     /// <summary>
     /// Проверяет, есть ли релевантные документы.
