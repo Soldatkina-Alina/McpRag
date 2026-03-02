@@ -39,51 +39,66 @@ public interface IVectorStoreService
     Task<int> CountAsync(CancellationToken cancellationToken = default);
 }
 
-/// <summary>
-/// Represents a document chunk with embedding.
-/// </summary>
-public class DocumentChunk
-{
     /// <summary>
-    /// Unique identifier for the chunk.
+    /// Представляет фрагмент документа с векторным представлением.
     /// </summary>
-    public string Id { get; set; } = System.Guid.NewGuid().ToString();
+    public class DocumentChunk
+    {
+        /// <summary>
+        /// Уникальный идентификатор фрагмента.
+        /// </summary>
+        public string Id { get; set; } = System.Guid.NewGuid().ToString();
 
-    /// <summary>
-    /// Text content of the chunk.
-    /// </summary>
-    public string Text { get; set; }
+        /// <summary>
+        /// Текст содержимого фрагмента.
+        /// </summary>
+        public string Text { get; set; }
 
-    /// <summary>
-    /// Source file path.
-    /// </summary>
-    public string Source { get; set; }
+        /// <summary>
+        /// Путь к исходному файлу.
+        /// </summary>
+        public string Source { get; set; }
 
-    /// <summary>
-    /// Chunk index in the source document.
-    /// </summary>
-    public int ChunkIndex { get; set; }
+        /// <summary>
+        /// Индекс фрагмента в исходном документе.
+        /// </summary>
+        public int ChunkIndex { get; set; }
 
-    /// <summary>
-    /// Embedding vector.
-    /// </summary>
-    public float[] Embedding { get; set; }
+        /// <summary>
+        /// Векторное представление (эмбеддинг) фрагмента.
+        /// </summary>
+        public float[] Embedding { get; set; }
 
-    /// <summary>
-    /// Indexed timestamp.
-    /// </summary>
-    public System.DateTime IndexedAt { get; set; } = System.DateTime.UtcNow;
+        /// <summary>
+        /// Время индексации фрагмента.
+        /// </summary>
+        public System.DateTime IndexedAt { get; set; } = System.DateTime.UtcNow;
 
-    /// <summary>
-    /// Additional metadata.
-    /// </summary>
-    public Dictionary<string, object> Metadata { get; set; } = new();
+        /// <summary>
+        /// Дополнительные метаданные.
+        /// </summary>
+        public Dictionary<string, object> Metadata { get; set; } = new();
 
-    /// <summary>
-    /// Relevance score of the chunk to the query.
-    /// </summary>
-    public float Score { get; set; }
-}
+        /// <summary>
+        /// Рейтинг релевантности фрагмента к запросу (от ChromaDB).
+        /// </summary>
+        public float Score { get; set; }
+
+        /// <summary>
+        /// Рейтинг релевантности от LLM (null = не оценено).
+        /// </summary>
+        public float? LLMScore { get; set; }
+
+        /// <summary>
+        /// Финальное решение о релевантности.
+        /// </summary>
+        public bool IsRelevant { get; set; } = true;
+
+        /// <summary>
+        /// Ошибка при оценке фрагмента (если была).
+        /// </summary>
+        public string GradeError { get; set; }
+    }
 
 /// <summary>
 /// Represents a search result with score.

@@ -72,6 +72,17 @@ namespace McpRag.Tools
                     }
                 }
                 
+                if (state.ExecutionSteps.Any(s => s.NodeName == "GradeDocuments"))
+                {
+                    var gradeStep = state.ExecutionSteps.First(s => s.NodeName == "GradeDocuments");
+                    result.AppendLine();
+                    result.AppendLine($"📊 **Оценка релевантности:** {gradeStep.Metadata["relevant_after_grade"]}/{gradeStep.Metadata["total_docs"]} документов");
+                    if (gradeStep.Metadata.ContainsKey("grade_errors"))
+                    {
+                        result.AppendLine($"   *Ошибок оценки: {gradeStep.Metadata["grade_errors"]}*");
+                    }
+                }
+                
                 if (state.Documents.Any())
                 {
                     var sources = state.Documents

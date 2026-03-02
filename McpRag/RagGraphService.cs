@@ -76,8 +76,22 @@ public class RagGraphService : IRagGraphService
                 });
                 return state;
             }
+
+            // Узел 2: Оценка релевантности через LLM
+            if (state.Documents.Any())
+            {
+                state = await GradeDocumentsNodeAsync(state, ct);
+                
+                if (!state.HasRelevantDocuments)
+                {
+                    state.Answer = $"❌ После оценки релевантности не найдено подходящих документов.\n" +
+                                   $"Порог ChromaDB: {_config.Value.MinRelevanceScore:P1}, " +
+                                   $"порог LLM: {_config.Value.GradeDocuments.LLMThreshold:P1}";
+                    return state;
+                }
+            }
             
-            // Узел 2: Генерация ответа
+            // Узел 3: Генерация ответа
             state = await GenerateNodeAsync(state, ct);
             
             return state;
@@ -134,6 +148,247 @@ public class RagGraphService : IRagGraphService
         }
         
         return state;
+    }
+
+    /// <summary>
+    /// Узел графа для оценки релевантности документов через LLM.
+    /// </summary>
+    /// <param name="state">Состояние графа.</param>
+    /// <param name="ct">Токен отмены.</param>
+    /// <returns>Обновленное состояние графа.</returns>
+    private async Task<RagState> GradeDocumentsNodeAsync(RagState state, CancellationToken ct)
+    {
+        var step = new ExecutionStep { NodeName = "GradeDocuments" };
+        var config = _config.Value.GradeDocuments;
+        
+        // Если узел отключен - просто возвращаем state
+        if (!config.Enabled)
+        {
+            step.Metadata["skipped"] = true;
+            state.ExecutionSteps.Add(step);
+            return state;
+        }
+        
+        var documentsToGrade = new List<DocumentChunk>();
+        var skippedDocs = new List<DocumentChunk>();
+        var errors = 0;
+        
+        try
+        {
+            // Разделяем документы на те, что нужно оценить, и те, что можно пропустить
+            foreach (var doc in state.Documents)
+            {
+                // Если документ уже имеет высокий Score от ChromaDB - пропускаем оценку
+                if (doc.Score >= config.ScoreThreshold)
+                {
+                    doc.IsRelevant = true;
+                    doc.LLMScore = 1.0f; // считаем, что LLM бы тоже сказала "yes"
+                    skippedDocs.Add(doc);
+                }
+                else
+                {
+                    documentsToGrade.Add(doc);
+                }
+            }
+            
+            step.Metadata["total_docs"] = state.Documents.Count;
+            step.Metadata["skipped_docs"] = skippedDocs.Count;
+            step.Metadata["to_grade"] = documentsToGrade.Count;
+            
+            // Оцениваем документы, которые требуют проверки
+            if (documentsToGrade.Any())
+            {
+                if (config.BatchSize > 1)
+                {
+                    await GradeDocumentsBatchAsync(documentsToGrade, state.Question, config, ct);
+                }
+                else
+                {
+                    await GradeDocumentsSequentialAsync(documentsToGrade, state.Question, config, ct);
+                }
+                
+                // Собираем статистику по ошибкам
+                errors = documentsToGrade.Count(d => !string.IsNullOrEmpty(d.GradeError));
+                
+                // Обновляем IsRelevant на основе LLMScore
+                foreach (var doc in documentsToGrade)
+                {
+                    doc.IsRelevant = doc.LLMScore >= config.LLMThreshold;
+                }
+            }
+            
+            // Формируем финальный список документов (только релевантные)
+            state.Documents = state.Documents
+                .Where(d => d.IsRelevant && d.Score >= _config.Value.MinRelevanceScore)
+                .ToList();
+            
+            step.Metadata["relevant_after_grade"] = state.Documents.Count;
+            step.Metadata["irrelevant"] = documentsToGrade.Count(d => !d.IsRelevant);
+            step.Metadata["grade_errors"] = errors;
+        }
+        catch (Exception ex)
+        {
+            step.Metadata["error"] = ex.Message;
+            _logger.LogError(ex, "GradeDocuments node failed");
+            
+            // При критической ошибке сохраняем все документы
+            state.Documents = state.Documents
+                .Where(d => d.Score >= _config.Value.MinRelevanceScore)
+                .ToList();
+            step.Metadata["fallback_to_score"] = true;
+        }
+        finally
+        {
+            state.ExecutionSteps.Add(step);
+        }
+        
+        return state;
+    }
+
+    /// <summary>
+    /// Последовательная оценка документов.
+    /// </summary>
+    /// <param name="docs">Список документов для оценки.</param>
+    /// <param name="question">Вопрос пользователя.</param>
+    /// <param name="config">Конфигурация оценки.</param>
+    /// <param name="ct">Токен отмены.</param>
+    private async Task GradeDocumentsSequentialAsync(
+        List<DocumentChunk> docs, 
+        string question, 
+        GradeDocumentsConfig config,
+        CancellationToken ct)
+    {
+        foreach (var doc in docs)
+        {
+            try
+            {
+                doc.LLMScore = await GradeSingleDocumentAsync(doc, question, config, ct);
+                doc.IsRelevant = doc.LLMScore >= config.LLMThreshold;
+            }
+            catch (Exception ex)
+            {
+                doc.GradeError = ex.Message;
+                doc.LLMScore = null;
+                doc.IsRelevant = true; // сохраняем при ошибке
+                _logger.LogWarning(ex, "Failed to grade document {docId}", doc.Id);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Оценка одного документа.
+    /// </summary>
+    /// <param name="doc">Документ для оценки.</param>
+    /// <param name="question">Вопрос пользователя.</param>
+    /// <param name="config">Конфигурация оценки.</param>
+    /// <param name="ct">Токен отмены.</param>
+    /// <returns>Оценка от LLM.</returns>
+    private async Task<float> GradeSingleDocumentAsync(
+        DocumentChunk doc, 
+        string question, 
+        GradeDocumentsConfig config,
+        CancellationToken ct)
+    {
+        string prompt;
+        
+        if (config.UseBinaryScore)
+        {
+            // Бинарная оценка (yes/no) - проще и быстрее
+            prompt = $@"
+Ты - эксперт по оценке релевантности документов для RAG системы.
+Оцени, содержит ли документ информацию, полезную для ответа на вопрос.
+
+Вопрос: {question}
+
+Документ:
+{doc.Text}
+
+Инструкция: Ответь ТОЛЬКО одним словом: 'yes' если документ релевантен, 'no' если нет.
+Не добавляй никаких пояснений, только 'yes' или 'no'.";
+        }
+        else
+        {
+            // Оценка по шкале 0-1 (более тонкая)
+            prompt = $@"
+Ты - эксперт по оценке релевантности документов для RAG системы.
+Оцени по шкале от 0 до 1, насколько документ релевантен для ответа на вопрос.
+
+Вопрос: {question}
+
+Документ:
+{doc.Text}
+
+Инструкция: Ответь ТОЛЬКО числом от 0 до 1, где 0 = полностью нерелевантен, 1 = идеально релевантен.
+Не добавляй никаких пояснений, только число.";
+        }
+        
+        var response = await _ollama.GenerateAsync(prompt, ct);
+        
+        if (config.UseBinaryScore)
+        {
+            // Надежная обработка бинарного ответа
+            var cleanResponse = response.Trim().ToLower();
+            if (cleanResponse.StartsWith("y")) return 1.0f; // yes, yeap, yup
+            if (cleanResponse.StartsWith("n")) return 0.0f; // no, nope
+            
+            // Если LLM вернула мусор - логируем и возвращаем 0.5 (нейтрально)
+            _logger.LogWarning("Unexpected binary response: {response}", response);
+            return 0.5f;
+        }
+        else
+        {
+            // Парсинг числа от 0 до 1
+            if (float.TryParse(response.Trim(), out var score))
+            {
+                return Math.Clamp(score, 0, 1);
+            }
+            
+            _logger.LogWarning("Expected float but got: {response}", response);
+            return 0.5f; // нейтральное значение при ошибке
+        }
+    }
+
+    /// <summary>
+    /// Пакетная оценка документов.
+    /// </summary>
+    /// <param name="docs">Список документов для оценки.</param>
+    /// <param name="question">Вопрос пользователя.</param>
+    /// <param name="config">Конфигурация оценки.</param>
+    /// <param name="ct">Токен отмены.</param>
+    private async Task GradeDocumentsBatchAsync(
+        List<DocumentChunk> docs, 
+        string question, 
+        GradeDocumentsConfig config,
+        CancellationToken ct)
+    {
+        // Разбиваем на батчи по config.BatchSize
+        for (int i = 0; i < docs.Count; i += config.BatchSize)
+        {
+            var batch = docs.Skip(i).Take(config.BatchSize).ToList();
+            
+            var prompt = $@"
+Ты - эксперт по оценке релевантности документов.
+Оцени каждый документ для вопроса: {question}
+
+Документы:
+{string.Join("\n---\n", batch.Select((d, idx) => $"[{idx}] {d.Text}"))}
+
+Инструкция: Ответь списком чисел от 0 до 1 через запятую.
+Пример: 0.9, 0.2, 0.7";
+
+            var response = await _ollama.GenerateAsync(prompt, ct);
+            
+            // Парсим ответ (упрощенно)
+            var scores = response.Split(',')
+                .Select(s => float.TryParse(s.Trim(), out var f) ? f : 0.5f)
+                .ToList();
+                
+            for (int j = 0; j < batch.Count && j < scores.Count; j++)
+            {
+                batch[j].LLMScore = scores[j];
+                batch[j].IsRelevant = scores[j] >= config.LLMThreshold;
+            }
+        }
     }
 
     /// <summary>

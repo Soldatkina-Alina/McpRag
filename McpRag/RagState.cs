@@ -56,5 +56,11 @@ public class RagState
     /// Проверяет, есть ли релевантные документы.
     /// </summary>
     public bool HasRelevantDocuments =>
-        Documents.Any(d => d.Score >= _config.MinRelevanceScore);
+        Documents.Any(d => d.IsRelevant && d.Score >= _config.MinRelevanceScore);
+
+    /// <summary>
+    /// Количество релевантных документов.
+    /// </summary>
+    public int RelevantCount =>
+        Documents.Count(d => d.IsRelevant && d.Score >= _config.MinRelevanceScore);
 }
