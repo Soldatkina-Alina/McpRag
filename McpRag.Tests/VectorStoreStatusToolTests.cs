@@ -6,6 +6,10 @@ using Xunit;
 
 namespace McpRag.Tests;
 
+/// <summary>
+/// Тесты для VectorStoreStatusTool - инструмента для проверки статуса векторного хранилища ChromaDB.
+/// Проверяют получение статуса и очистку хранилища.
+/// </summary>
 public class VectorStoreStatusToolTests
 {
     private readonly Mock<IVectorStoreService> _vectorStoreMock;
@@ -18,6 +22,10 @@ public class VectorStoreStatusToolTests
         _vectorStoreStatusTool = new VectorStoreStatusTool(_vectorStoreMock.Object, logger);
     }
 
+    /// <summary>
+    /// Проверяет, что метод VectorStoreStatus возвращает правильный статус векторного хранилища.
+    /// Убеждается, что статус содержит количество документов и другие необходимые данные.
+    /// </summary>
     [Fact]
     public async Task VectorStoreStatus_ShouldReturnStatus()
     {
@@ -33,6 +41,10 @@ public class VectorStoreStatusToolTests
         Assert.Contains("Количество документов: 5", result);
     }
 
+    /// <summary>
+    /// Проверяет, что метод ClearVectorStore корректно отправляет запрос на очистку хранилища.
+    /// Убеждается, что запрос отправляется и инструмент возвращает сообщение о успешной очистке.
+    /// </summary>
     [Fact]
     public async Task ClearVectorStore_ShouldClearDocuments()
     {
@@ -49,6 +61,10 @@ public class VectorStoreStatusToolTests
         Assert.True(wasCalled);
     }
 
+    /// <summary>
+    /// Проверяет, что метод ClearVectorStore возвращает сообщение об ошибке при возникновении исключения.
+    /// Убеждается, что инструмент корректно обрабатывает ошибки при очистке хранилища.
+    /// </summary>
     [Fact]
     public async Task ClearVectorStore_WithError_ShouldReturnErrorMessage()
     {

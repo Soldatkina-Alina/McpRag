@@ -1,35 +1,70 @@
+using McpRag;
 using McpRag.Tools;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace McpRag.Tests;
 
+/// <summary>
+/// Тесты для EchoTools - инструмента для эхо-ответа.
+/// Проверяют работу с разными входными данными и сценариями.
+/// </summary>
 public class EchoToolsTests
 {
-    [Fact]
-    public void Echo_ShouldReturnMessage_WithPrefix()
+    private readonly EchoTools _echoTools;
+
+    public EchoToolsTests()
     {
-        // Arrange
         var logger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<EchoTools>();
-        var echoTools = new EchoTools(logger);
-        var testMessage = "Привет, мир!";
-
-        // Act
-        var result = echoTools.Echo(testMessage);
-
-        // Assert
-        Assert.Equal($"Echo: {testMessage}", result);
+        _echoTools = new EchoTools(logger);
     }
 
+    /// <summary>
+    /// Проверяет, что метод Echo возвращает правильный ответ для текстового сообщения.
+    /// Убеждается, что ответ содержит введенное сообщение.
+    /// </summary>
     [Fact]
-    public void Echo_ShouldReturnEmptyMessage_WhenEmptyString()
+    public void Echo_ShouldReturnMessageForNonEmptyString()
     {
         // Arrange
-        var logger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<EchoTools>();
-        var echoTools = new EchoTools(logger);
+        string message = "Test message";
 
         // Act
-        var result = echoTools.Echo(string.Empty);
+        string result = _echoTools.Echo(message);
+
+        // Assert
+        Assert.Equal($"Echo: {message}", result);
+    }
+
+    /// <summary>
+    /// Проверяет, что метод Echo обрабатывает пустую строку корректно.
+    /// Убеждается, что инструмент возвращает ответ без ошибок при пустом входном параметре.
+    /// </summary>
+    [Fact]
+    public void Echo_ShouldHandleEmptyString()
+    {
+        // Arrange
+        string message = string.Empty;
+
+        // Act
+        string result = _echoTools.Echo(message);
+
+        // Assert
+        Assert.Equal("Echo: ", result);
+    }
+
+    /// <summary>
+    /// Проверяет, что метод Echo обрабатывает null сообщение.
+    /// Убеждается, что инструмент возвращает ответ без ошибок при null входном параметре.
+    /// </summary>
+    [Fact]
+    public void Echo_ShouldHandleNull()
+    {
+        // Arrange
+        string message = null;
+
+        // Act
+        string result = _echoTools.Echo(message);
 
         // Assert
         Assert.Equal("Echo: ", result);

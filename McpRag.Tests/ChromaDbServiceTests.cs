@@ -11,6 +11,10 @@ using Xunit;
 
 namespace McpRag.Tests;
 
+/// <summary>
+/// Тесты для ChromaDbService - сервиса для работы с векторным хранилищем ChromaDB.
+/// Проверяют основные операции с хранилищем: добавление, поиск, очистка и подсчет документов.
+/// </summary>
 public class ChromaDbServiceTests
 {
     private readonly Mock<IOllamaService> _ollamaMock;
@@ -30,6 +34,10 @@ public class ChromaDbServiceTests
         _chromaDbService = new ChromaDbService(_httpClient, _ollamaMock.Object, logger);
     }
 
+    /// <summary>
+    /// Проверяет, что метод AddDocumentsAsync корректно отправляет запрос на добавление документов в ChromaDB.
+    /// Убеждается, что запрос содержит правильные данные и отправляется один раз.
+    /// </summary>
     [Fact]
     public async Task AddDocumentsAsync_ShouldAddDocuments()
     {
@@ -76,6 +84,10 @@ public class ChromaDbServiceTests
             ItExpr.IsAny<CancellationToken>());
     }
 
+    /// <summary>
+    /// Проверяет, что метод SearchAsync корректно ищет документы в ChromaDB по запросу.
+    /// Убеждается, что поиск возвращает результаты и они содержат ожидаемый текст.
+    /// </summary>
     [Fact]
     public async Task SearchAsync_ShouldReturnResults()
     {
@@ -127,6 +139,10 @@ public class ChromaDbServiceTests
         Assert.Equal("Test document", results.First().Text);
     }
 
+    /// <summary>
+    /// Проверяет, что метод ClearAsync корректно отправляет запрос на очистку всех документов в ChromaDB.
+    /// Убеждается, что запрос отправляется один раз и содержит правильные параметры.
+    /// </summary>
     [Fact]
     public async Task ClearAsync_ShouldClearAllDocuments()
     {
@@ -153,6 +169,10 @@ public class ChromaDbServiceTests
             ItExpr.IsAny<CancellationToken>());
     }
 
+    /// <summary>
+    /// Проверяет, что метод CountAsync возвращает 0 при пустом хранилище.
+    /// Убеждается, что сервис корректно обрабатывает ответ от ChromaDB и возвращает ожидаемое значение.
+    /// </summary>
     [Fact]
     public async Task CountAsync_ShouldReturnZero_WhenEmpty()
     {

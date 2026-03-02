@@ -7,8 +7,16 @@ using Xunit;
 
 namespace McpRag.Tests;
 
+/// <summary>
+/// Тесты для IndexFolderTools - инструмента для индексации папок с файлами.
+/// Проверяют работу с существующими и несуществующими папками.
+/// </summary>
 public class IndexFolderToolsTests
 {
+    /// <summary>
+    /// Проверяет, что метод IndexFolder возвращает количество файлов при индексации существующей папки.
+    /// Убеждается, что результат содержит информацию о загруженных файлах.
+    /// </summary>
     [Fact]
     public async Task IndexFolder_ShouldReturnFileCount_ForExistingFolder()
     {
@@ -29,6 +37,10 @@ public class IndexFolderToolsTests
         Assert.Contains("Загружено", result);
     }
 
+    /// <summary>
+    /// Проверяет, что метод IndexFolder возвращает сообщение об ошибке при попытке индексации несуществующей папки.
+    /// Убеждается, что инструмент корректно обрабатывает ошибку и возвращает соответствующее сообщение.
+    /// </summary>
     [Fact]
     public async Task IndexFolder_ShouldReturnError_ForNonExistingFolder()
     {

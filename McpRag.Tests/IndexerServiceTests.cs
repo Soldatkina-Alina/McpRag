@@ -11,8 +11,16 @@ using Xunit;
 
 namespace McpRag.Tests;
 
+/// <summary>
+/// Тесты для IndexerService - сервиса для индексации документов.
+/// Проверяют загрузку файлов, работу с загруженными файлами и очистку списка загруженных файлов.
+/// </summary>
 public class IndexerServiceTests
 {
+    /// <summary>
+    /// Проверяет, что метод LoadFilesAsync правильно загружает файлы из существующей папки.
+    /// Убеждается, что список загруженных файлов не пуст и содержит ожидаемые элементы.
+    /// </summary>
     [Fact]
     public async Task LoadFilesAsync_ShouldLoadFiles_FromExistingFolder()
     {
@@ -32,6 +40,10 @@ public class IndexerServiceTests
         Assert.NotEmpty(files);
     }
 
+    /// <summary>
+    /// Проверяет, что метод LoadFilesAsync возвращает пустой список, если папка не существует.
+    /// Убеждается, что сервис корректно обрабатывает ситуацию с несуществующей папкой.
+    /// </summary>
     [Fact]
     public async Task LoadFilesAsync_ShouldReturnEmptyList_WhenFolderDoesNotExist()
     {
@@ -51,6 +63,10 @@ public class IndexerServiceTests
         Assert.Empty(files);
     }
 
+    /// <summary>
+    /// Проверяет, что метод LoadFilesAsync загружает только файлы с указанным расширением.
+    /// Убеждается, что все загруженные файлы имеют ожидаемое расширение.
+    /// </summary>
     [Fact]
     public async Task LoadFilesAsync_ShouldLoadFiles_WithSpecificExtension()
     {
@@ -71,6 +87,10 @@ public class IndexerServiceTests
         Assert.All(files, f => Assert.Equal(".txt", f.Extension));
     }
 
+    /// <summary>
+    /// Проверяет, что метод GetLoadedFiles возвращает список загруженных файлов.
+    /// Убеждается, что после загрузки файлов метод возвращает не пустой список.
+    /// </summary>
     [Fact]
     public async Task GetLoadedFiles_ShouldReturnLoadedFiles()
     {
@@ -91,6 +111,10 @@ public class IndexerServiceTests
         Assert.NotEmpty(loadedFiles);
     }
 
+    /// <summary>
+    /// Проверяет, что метод ClearLoadedFiles очищает список загруженных файлов.
+    /// Убеждается, что после вызова метода список становится пустым.
+    /// </summary>
     [Fact]
     public async Task ClearLoadedFiles_ShouldClearLoadedFiles()
     {

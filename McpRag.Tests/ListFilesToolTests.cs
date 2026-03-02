@@ -7,8 +7,16 @@ using Xunit;
 
 namespace McpRag.Tests;
 
+/// <summary>
+/// Тесты для ListFilesTool - инструмента для получения списка загруженных файлов.
+/// Проверяют работу с загруженными файлами, фильтрацию по расширению и обработку пустого списка.
+/// </summary>
 public class ListFilesToolTests
 {
+    /// <summary>
+    /// Проверяет, что метод ListFiles возвращает список файлов, когда они загружены.
+    /// Убеждается, что результат не содержит сообщение о отсутствии загруженных файлов.
+    /// </summary>
     [Fact]
     public void ListFiles_ShouldReturnFileList_WhenFilesAreLoaded()
     {
@@ -30,6 +38,10 @@ public class ListFilesToolTests
         Assert.NotEqual("Нет загруженных файлов", result);
     }
 
+    /// <summary>
+    /// Проверяет, что метод ListFiles возвращает сообщение о не загруженных файлах, когда список пуст.
+    /// Убеждается, что инструмент корректно обрабатывает ситуацию с пустым списком файлов.
+    /// </summary>
     [Fact]
     public void ListFiles_ShouldReturnNoFilesMessage_WhenNoFilesAreLoaded()
     {
@@ -49,6 +61,10 @@ public class ListFilesToolTests
         Assert.Equal("Нет загруженных файлов", result);
     }
 
+    /// <summary>
+    /// Проверяет, что метод ListFiles фильтрует файлы по расширению.
+    /// Убеждается, что в результатах есть файлы с указанным расширением и нет файлов с другим расширением.
+    /// </summary>
     [Fact]
     public void ListFiles_ShouldFilterFiles_ByExtension()
     {

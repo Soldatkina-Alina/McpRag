@@ -6,6 +6,10 @@ using Xunit;
 
 namespace McpRag.Tests;
 
+/// <summary>
+/// Тесты для SearchDocsTool - инструмента для поиска релевантных фрагментов документов.
+/// Проверяют функциональность поиска по запросу с различными параметрами и сценариями.
+/// </summary>
 public class SearchDocsToolTests
 {
     private readonly Mock<IVectorStoreService> _vectorStoreMock;
@@ -18,6 +22,10 @@ public class SearchDocsToolTests
         _searchDocsTool = new SearchDocsTool(_vectorStoreMock.Object, logger);
     }
 
+    /// <summary>
+    /// Проверяет, что метод SearchDocs возвращает результаты при заданном корректном запросе.
+    /// Убеждается, что результаты содержат ожидаемые документы.
+    /// </summary>
     [Fact]
     public async Task SearchDocs_WithValidQuery_ShouldReturnResults()
     {
@@ -57,6 +65,10 @@ public class SearchDocsToolTests
         Assert.Contains("dotnet_framework.txt", result);
     }
 
+    /// <summary>
+    /// Проверяет, что метод SearchDocs возвращает сообщение о не найденных документах при запросе, не дающем результатов.
+    /// Убеждается, что инструмент корректно обрабатывает пустой список результатов.
+    /// </summary>
     [Fact]
     public async Task SearchDocs_WithNoResults_ShouldReturnNotFoundMessage()
     {
@@ -74,6 +86,10 @@ public class SearchDocsToolTests
         Assert.Contains("Не найдено релевантных документов по запросу", result);
     }
 
+    /// <summary>
+    /// Проверяет, что метод SearchDocs не выбрасывает исключение при пустом запросе.
+    /// Убеждается, что инструмент корректно обрабатывает пустую строку в качестве запроса.
+    /// </summary>
     [Fact]
     public async Task SearchDocs_WithEmptyQuery_ShouldNotThrow()
     {
@@ -89,6 +105,10 @@ public class SearchDocsToolTests
         Assert.NotNull(result);
     }
 
+    /// <summary>
+    /// Проверяет, что метод SearchDocs использует значение по умолчанию для параметра topK, если передан 0.
+    /// Убеждается, что инструмент корректно обрабатывает некорректное значение параметра.
+    /// </summary>
     [Fact]
     public async Task SearchDocs_WithZeroTopK_ShouldUseDefault()
     {
@@ -118,6 +138,10 @@ public class SearchDocsToolTests
         Assert.Contains("Найдено 1 релевантных документов", result);
     }
 
+    /// <summary>
+    /// Проверяет, что метод SearchDocs использует значение по умолчанию для параметра topK, если передано отрицательное число.
+    /// Убеждается, что инструмент корректно обрабатывает некорректное значение параметра.
+    /// </summary>
     [Fact]
     public async Task SearchDocs_WithNegativeTopK_ShouldUseDefault()
     {
