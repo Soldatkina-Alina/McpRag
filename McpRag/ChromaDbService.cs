@@ -11,7 +11,8 @@ using System.Threading.Tasks;
 namespace McpRag;
 
 /// <summary>
-/// Implementation of IVectorStoreService using ChromaDB.
+/// Реализация интерфейса IVectorStoreService для работы с ChromaDB - векторной базой данных.
+/// Предоставляет методы для добавления, поиска, удаления документов и получения статистики.
 /// </summary>
 public class ChromaDbService : IVectorStoreService
 {
@@ -24,6 +25,13 @@ public class ChromaDbService : IVectorStoreService
     // API v2 endpoints
     private readonly string _collectionsEndpoint = "/api/v2/tenants/default_tenant/databases/default_database/collections";
 
+    /// <summary>
+    /// Инициализирует новый экземпляр <see cref="ChromaDbService"/>.
+    /// </summary>
+    /// <param name="httpClient">HTTP-клиент для отправки запросов к ChromaDB API.</param>
+    /// <param name="ollama">Сервис для работы с Ollama (генерация эмбеддингов).</param>
+    /// <param name="logger">Логгер для записи информации о работе сервиса.</param>
+    /// <exception cref="ArgumentNullException">Выбрасывается, если любой из параметров равен null.</exception>
     public ChromaDbService(HttpClient httpClient, IOllamaService ollama, ILogger<ChromaDbService> logger)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
@@ -33,6 +41,12 @@ public class ChromaDbService : IVectorStoreService
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    /// <summary>
+    /// Добавляет набор фрагментов документов в коллекцию ChromaDB.
+    /// </summary>
+    /// <param name="chunks">Коллекция фрагментов документов для добавления.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <exception cref="HttpRequestException">Выбрасывается, если запрос к API завершился с ошибкой.</exception>
     public async Task AddDocumentsAsync(IEnumerable<DocumentChunk> chunks, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Adding {Count} document chunks to ChromaDB collection: {Collection}",
@@ -72,6 +86,14 @@ public class ChromaDbService : IVectorStoreService
         _logger.LogInformation("Successfully added {Count} document chunks to ChromaDB", chunks.Count());
     }
 
+    /// <summary>
+    /// Ищет наиболее релевантные фрагменты документов для заданного запроса.
+    /// </summary>
+    /// <param name="query">Текст запроса для поиска.</param>
+    /// <param name="topK">Максимальное количество результатов для возврата.</param>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>Коллекция найденных фрагментов документов.</returns>
+    /// <exception cref="HttpRequestException">Выбрасывается, если запрос к API завершился с ошибкой.</exception>
     public async Task<IEnumerable<DocumentChunk>> SearchAsync(string query, int topK, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Searching for {TopK} relevant documents with query: {Query}",
@@ -139,6 +161,11 @@ public class ChromaDbService : IVectorStoreService
         return documentChunks;
     }
 
+    /// <summary>
+    /// Удаляет все документы из коллекции ChromaDB.
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <exception cref="HttpRequestException">Выбрасывается, если запрос к API завершился с ошибкой.</exception>
     public async Task ClearAsync(CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Clearing all documents from ChromaDB collection: {Collection}", _collectionName);
@@ -172,6 +199,12 @@ public class ChromaDbService : IVectorStoreService
         _logger.LogInformation("Successfully cleared all documents from ChromaDB collection");
     }
 
+    /// <summary>
+    /// Возвращает количество документов в коллекции ChromaDB.
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>Количество документов в коллекции.</returns>
+    /// <exception cref="HttpRequestException">Выбрасывается, если запрос к API завершился с ошибкой.</exception>
     public async Task<int> CountAsync(CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Getting document count from ChromaDB collection: {Collection}", _collectionName);
@@ -202,6 +235,11 @@ public class ChromaDbService : IVectorStoreService
         return count;
     }
 
+    /// <summary>
+    /// Получает идентификатор коллекции по имени.
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>Идентификатор коллекции или null, если коллекция не найдена.</returns>
     private async Task<string> GetCollectionIdAsync(CancellationToken cancellationToken)
     {
         _logger.LogDebug("Getting collection ID for {Collection}", _collectionName);
@@ -222,6 +260,12 @@ public class ChromaDbService : IVectorStoreService
         return collection?.Id;
     }
 
+    /// <summary>
+    /// Получает идентификатор коллекции по имени или создает новую коллекцию, если она не существует.
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>Идентификатор коллекции.</returns>
+    /// <exception cref="HttpRequestException">Выбрасывается, если запрос к API завершился с ошибкой.</exception>
     private async Task<string> GetOrCreateCollectionIdAsync(CancellationToken cancellationToken)
     {
         var collectionId = await GetCollectionIdAsync(cancellationToken);
@@ -269,45 +313,98 @@ public class ChromaDbService : IVectorStoreService
     }
 }
 
+/// <summary>
+/// Представляет коллекцию в ChromaDB.
+/// </summary>
 public class ChromaCollection
 {
+    /// <summary>
+    /// Уникальный идентификатор коллекции.
+    /// </summary>
     [JsonPropertyName("id")]
     public string Id { get; set; }
 
+    /// <summary>
+    /// Название коллекции.
+    /// </summary>
     [JsonPropertyName("name")]
     public string Name { get; set; }
 
+    /// <summary>
+    /// Метаданные коллекции.
+    /// </summary>
     [JsonPropertyName("metadata")]
     public Dictionary<string, object> Metadata { get; set; }
 
+    /// <summary>
+    /// Тenant, к которому принадлежит коллекция.
+    /// </summary>
     [JsonPropertyName("tenant")]
     public string Tenant { get; set; }
 
+    /// <summary>
+    /// База данных, в которой находится коллекция.
+    /// </summary>
     [JsonPropertyName("database")]
     public string Database { get; set; }
 
-    // Остальные поля - опционально
+    /// <summary>
+    /// Размерность векторных эмбеддингов в коллекции.
+    /// </summary>
     [JsonPropertyName("dimension")]
     public int? Dimension { get; set; }
 
+    /// <summary>
+    /// Версия коллекции.
+    /// </summary>
     [JsonPropertyName("version")]
     public int Version { get; set; }
 }
 
+/// <summary>
+/// Ответ от ChromaDB на запрос поиска.
+/// </summary>
 public class ChromaSearchResponse
 {
+    /// <summary>
+    /// Список результатов поиска.
+    /// </summary>
     public List<ChromaSearchResult> Results { get; set; } = new();
 }
 
+/// <summary>
+/// Результаты поиска в ChromaDB.
+/// </summary>
 public class ChromaSearchResult
 {
+    /// <summary>
+    /// Идентификаторы найденных документов.
+    /// </summary>
     public List<string> Ids { get; set; } = new();
+
+    /// <summary>
+    /// Тексты найденных документов.
+    /// </summary>
     public List<string> Documents { get; set; } = new();
+
+    /// <summary>
+    /// Метаданные найденных документов.
+    /// </summary>
     public List<Dictionary<string, object>> Metadatas { get; set; } = new();
+
+    /// <summary>
+    /// Эмбеддинги найденных документов.
+    /// </summary>
     public List<List<float>> Embeddings { get; set; } = new();
 }
 
+/// <summary>
+/// Ответ от ChromaDB на запрос получения количества документов.
+/// </summary>
 public class ChromaCountResponse
 {
+    /// <summary>
+    /// Количество документов в коллекции.
+    /// </summary>
     public int Count { get; set; }
 }
