@@ -32,6 +32,12 @@ namespace McpRag
         public bool IncludeMetadataInContext { get; set; } = true;
 
         /// <summary>
+        /// Температура для экспоненциальной нормализации score.
+        /// Чем выше значение, тем мягче нормализация.
+        /// </summary>
+        public float Temperature { get; set; } = 250.0f;
+
+        /// <summary>
         /// Конфигурация для оценки документов через LLM.
         /// </summary>
         public GradeDocumentsConfig GradeDocuments { get; set; } = new();

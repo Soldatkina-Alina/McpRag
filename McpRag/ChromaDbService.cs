@@ -22,6 +22,7 @@ public class ChromaDbService : IVectorStoreService
     private readonly HttpClient _httpClient;
     private readonly IOllamaService _ollama;
     private readonly ILogger<ChromaDbService> _logger;
+    private readonly RAGConfig _config;
 
     // API v2 endpoints
     private readonly string _collectionsEndpoint = "/api/v2/tenants/default_tenant/databases/default_database/collections";
@@ -33,12 +34,13 @@ public class ChromaDbService : IVectorStoreService
     /// <param name="ollama">Сервис для работы с Ollama (генерация эмбеддингов).</param>
     /// <param name="logger">Логгер для записи информации о работе сервиса.</param>
     /// <exception cref="ArgumentNullException">Выбрасывается, если любой из параметров равен null.</exception>
-    public ChromaDbService(HttpClient httpClient, IOllamaService ollama, ILogger<ChromaDbService> logger)
+    public ChromaDbService(HttpClient httpClient, IOllamaService ollama, Microsoft.Extensions.Options.IOptions<RAGConfig> config, ILogger<ChromaDbService> logger)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _httpClient.BaseAddress = new Uri(_baseUrl);
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
         _ollama = ollama ?? throw new ArgumentNullException(nameof(ollama));
+        _config = config?.Value ?? throw new ArgumentNullException(nameof(config));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -162,9 +164,10 @@ public class ChromaDbService : IVectorStoreService
             if (chunk.Metadata.TryGetValue("distance", out var distanceObj))
             {
                 var distance = Convert.ToDouble(distanceObj);
-                // Convert distance to score (0-1, where 0 is perfect match)
-                var score = 1.0 / (1.0 + distance);
+                //Релевантность документа: от 0 до 1
+            var score = Math.Exp(-distance / _config.Temperature);
                 chunk.Score = (float)score;
+
                 results.Add(new SearchResult { Chunk = chunk, Score = (float)score });
             }
             else

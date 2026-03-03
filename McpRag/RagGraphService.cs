@@ -43,13 +43,20 @@ public class RagGraphService : IRagGraphService
     }
 
     /// <summary>
-    /// Выполняет график RAG.
+    /// Основной метод выполнения графа RAG (Retrieval-Augmented Generation).
+    /// Реализует полный цикл обработки вопроса:
+    /// 1. Улучшение запроса
+    /// 2. Поиск документов в векторном хранилище с поддержкой retry-механизма
+    /// 3. Оценка релевантности документов через LLM
+    /// 4. Генерация ответа на основе контекста
+    /// 5. Проверка на галлюцинации и регенерация ответа при необходимости
     /// </summary>
-    /// <param name="question">Вопрос пользователя.</param>
-    /// <param name="ct">Токен отмены.</param>
-    /// <returns>Состояние графа RAG.</returns>
+    /// <param name="question">Вопрос пользователя для обработки.</param>
+    /// <param name="ct">Токен отмены для прерывания операции.</param>
+    /// <returns>Состояние графа RAG с результатами обработки.</returns>
     public async Task<RagState> ExecuteAsync(string question, CancellationToken ct)
     {
+        // Инициализация состояния графа с базовыми параметрами
         var state = new RagState(_config) 
         { 
             Question = question,
@@ -59,36 +66,37 @@ public class RagGraphService : IRagGraphService
         
         try
         {
-            // Шаг 1: Rewrite (улучшаем запрос перед первым поиском)
+            // Шаг 1: Улучшение запроса перед первым поиском (опционально)
             if (_config.Value.Retry.EnableQueryRewrite)
             {
                 state = await RewriteQueryNodeAsync(state, ct);
             }
             
-            // Начало retry-цикла
+            // Начало retry-цикла для поиска достаточного количества релевантных документов
             while (state.RetryCount <= _config.Value.Retry.MaxRetries)
             {
-                // Шаг 2: Search с текущим запросом
+                // Шаг 2: Поиск документов в векторном хранилище по текущему запросу
                 state = await SearchNodeAsync(state, ct);
                 
-                // Шаг 3: GradeDocuments (из Задачи 10)
+                // Шаг 3: Оценка релевантности найденных документов через LLM
                 state = await GradeDocumentsNodeAsync(state, ct);
                 
-                // Проверка: достаточно ли документов?
+                // Проверка: достаточно ли документов имеют высокую релевантность?
                 if (HasEnoughRelevantDocuments(state))
                 {
-                    break; // достаточно - выходим из цикла
+                    _logger.LogInformation("Найдено достаточное количество релевантных документов ({Count})", 
+                        state.Documents.Count(d => d.IsRelevant));
+                    break; // Достаточно документов - выходим из цикла поиска
                 }
                 
-                // Если есть еще попытки - расширяем запрос
+                // Если есть еще попытки - расширяем запрос для поиска более широкого диапазона информации
                 if (state.RetryCount < _config.Value.Retry.MaxRetries)
                 {
                     state = await BroadenQueryNodeAsync(state, ct);
-                    // Продолжаем цикл
                 }
                 else
                 {
-                    // Достигнут лимит попыток
+                    // Достигнут лимит попыток - логируем и завершаем цикл
                     state.ExecutionSteps.Add(new ExecutionStep 
                     { 
                         NodeName = "MaxRetriesReached",
@@ -98,45 +106,50 @@ public class RagGraphService : IRagGraphService
                             ["relevant_found"] = state.Documents.Count(d => d.IsRelevant)
                         }
                     });
+                    _logger.LogWarning("Достигнут лимит попыток поиска ({MaxRetries}), найдено {Count} релевантных документов", 
+                        _config.Value.Retry.MaxRetries, state.Documents.Count(d => d.IsRelevant));
                     break;
                 }
             }
             
-            // Если после всех попыток нет релевантных документов
+            // Если после всех попыток не найдено ни одного релевантного документа
             if (!state.Documents.Any(d => d.IsRelevant))
             {
                 state.Answer = $"❌ После {state.RetryCount + 1} попыток не найдено релевантных документов.\n" +
                                $"Последний запрос: '{state.CurrentQuery}'\n" +
                                $"История запросов: {string.Join(" → ", state.QueryHistory)}";
+                _logger.LogWarning("Не найдено релевантных документов для вопроса: {Question}", question);
                 return state;
             }
             
-            // Шаг 4: Generate (из Задачи 9)
+            // Шаг 4: Генерация ответа на основе релевантных документов
             state = await GenerateNodeAsync(state, ct);
             
-            // Проверка на галлюцинации
+            // Шаг 5: Проверка ответа на галлюцинации (информацию, не найденную в контексте)
             state = await HallucinationCheckNodeAsync(state, ct);
             
-            // Если не grounded и есть попытки - регенерируем
+            // Если ответ не соответствует контексту и есть попытки регенерации - повторяем генерацию
             if (!state.IsGrounded && state.RegenerationCount < _config.Value.Hallucination.MaxRegenerations)
             {
                 state = await RegenerateNodeAsync(state, ct);
                 
-                // Проверяем снова (опционально)
+                // Проверяем снова на галлюцинации
                 state = await HallucinationCheckNodeAsync(state, ct);
             }
             
-            // Если после регенерации все еще не grounded - добавляем предупреждение
+            // Если после регенерации ответ все еще не соответствует контексту - добавляем предупреждение
             if (!state.IsGrounded)
             {
-                state.Answer += "\n\n⚠️ **Предупреждение**: Ответ может содержать элементы, не найденные в документах.";
+                state.Answer += "\n\n⚠️ **Предупреждение**: Ответ может содержать элементы, не найденные в документов.";
+                _logger.LogWarning("Ответ содержит галлюцинации для вопроса: {Question}", question);
             }
             
+            _logger.LogInformation("Обработка вопроса завершена успешно");
             return state;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка при выполнении графа RAG");
+            _logger.LogError(ex, "Ошибка при выполнении графа RAG для вопроса: {Question}", question);
             state.HasError = true;
             state.ErrorMessage = ex.Message;
             state.ExecutionSteps.Add(new ExecutionStep 
@@ -253,6 +266,7 @@ public class RagGraphService : IRagGraphService
     private bool HasEnoughRelevantDocuments(RagState state)
     {
         var config = _config.Value.Retry;
+
         // Используем динамический порог и счетчик релевантных
         var relevantCount = state.Documents.Count(d => 
             d.IsRelevant && d.Score >= state.CurrentScoreThreshold);

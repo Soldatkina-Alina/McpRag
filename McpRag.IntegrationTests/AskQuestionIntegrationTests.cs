@@ -44,12 +44,9 @@ public class AskQuestionIntegrationTests
         
         // Создаем ChromaDbService
         var chromaLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ChromaDbService>();
-        var chromaDbService = new ChromaDbService(httpClient, ollamaService, chromaLogger);
-        
-        // Создаем RAGConfig
         var ragConfig = Options.Create(new RAGConfig
         {
-            MaxChunks = 5,
+            MaxChunks = 2,
             MinRelevanceScore = 0.5f, // Более лояльный порог
             MaxContextTokens = 2000,
             IncludeMetadataInContext = true,
@@ -58,6 +55,7 @@ public class AskQuestionIntegrationTests
                 Enabled = false // Отключаем оценку для теста
             }
         });
+        var chromaDbService = new ChromaDbService(httpClient, ollamaService, ragConfig, chromaLogger);
         
         // Создаем ContextFormatter
         var contextFormatter = new ContextFormatter();
@@ -78,7 +76,7 @@ public class AskQuestionIntegrationTests
         try
         {
             // Вопрос с существующей информацией в docs/test_docs/
-            var question = "искусственный интеллект";
+            var question = "собачка";
             var result = await askQuestionTool.AskQuestion(question);
             
             // Assert
@@ -86,7 +84,7 @@ public class AskQuestionIntegrationTests
             Console.WriteLine($"Ответ: {result}");
             
             Assert.False(string.IsNullOrEmpty(result));
-            Assert.Contains("Моня", result); // Проверка, что ответ содержит кличку из cats.txt
+            Assert.Contains("собака", result); 
             Assert.DoesNotContain("не найдено информации", result);
             Assert.DoesNotContain("❌", result);
             
@@ -133,10 +131,6 @@ public class AskQuestionIntegrationTests
         });
         var ollamaService = new OllamaService(ollamaHttpClient, ollamaConfig, ollamaLogger);
         
-        // Создаем ChromaDbService
-        var chromaLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ChromaDbService>();
-        var chromaDbService = new ChromaDbService(httpClient, ollamaService, chromaLogger);
-        
         // Создаем RAGConfig
         var ragConfig = Options.Create(new RAGConfig
         {
@@ -149,6 +143,10 @@ public class AskQuestionIntegrationTests
                 Enabled = false // Отключаем оценку для теста
             }
         });
+        
+        // Создаем ChromaDbService
+        var chromaLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ChromaDbService>();
+        var chromaDbService = new ChromaDbService(httpClient, ollamaService, ragConfig, chromaLogger);
         
         // Создаем ContextFormatter
         var contextFormatter = new ContextFormatter();

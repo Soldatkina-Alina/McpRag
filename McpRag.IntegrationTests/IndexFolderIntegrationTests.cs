@@ -25,12 +25,13 @@ public class IndexFolderIntegrationTests
         
         var indexerLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<IndexerService>();
         var chromaLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ChromaDbService>();
-        var config = Options.Create(new IndexerConfig());
+        var indexerConfig = Options.Create(new IndexerConfig());
+        var ragConfig = Options.Create(new RAGConfig());
         
         var httpClient = new HttpClient { BaseAddress = new System.Uri("http://localhost:8000") };
-        var chromaDbService = new ChromaDbService(httpClient, CreateMockOllamaService().Object, chromaLogger);
+        var chromaDbService = new ChromaDbService(httpClient, CreateMockOllamaService().Object, ragConfig, chromaLogger);
         
-        var indexerService = new IndexerService(config, chromaDbService, CreateMockOllamaService().Object, indexerLogger);
+        var indexerService = new IndexerService(indexerConfig, chromaDbService, CreateMockOllamaService().Object, indexerLogger);
         var toolsLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<IndexFolderTools>();
         var indexFolderTools = new IndexFolderTools(toolsLogger, indexerService);
         
@@ -69,7 +70,8 @@ public class IndexFolderIntegrationTests
         });
         var ollamaService = new OllamaService(ollamaHttpClient, ollamaConfig, ollamaLogger);
         
-        var chromaDbService = new ChromaDbService(httpClient, ollamaService, logger);
+        var ragConfig = Options.Create(new RAGConfig());
+        var chromaDbService = new ChromaDbService(httpClient, ollamaService, ragConfig, logger);
         
         // Создаем тестовые данные с реальными эмбеддингами
         var testChunks = new[]
@@ -93,7 +95,7 @@ public class IndexFolderIntegrationTests
             new DocumentChunk
             {
                 Id = Guid.NewGuid().ToString(),
-                Text = "Третий тестовый документ о системах ретриевального-Augmented Generation (RAG)",
+                Text = "Третий тестовый документ о собачках. Собаки любят уток",
                 Source = "test_rag.txt",
                 ChunkIndex = 0,
                 IndexedAt = DateTime.Now
@@ -123,8 +125,9 @@ public class IndexFolderIntegrationTests
             // Проверка доступности ChromaDB
             var countBefore = await chromaDbService.CountAsync();
             Console.WriteLine($"Количество документов перед добавлением: {countBefore}");
-            
+
             // Добавление тестовых данных
+            await chromaDbService.ClearAsync();
             await chromaDbService.AddDocumentsAsync(chunksWithEmbeddings);
             //Console.WriteLine("Тестовые данные успешно добавлены");
             
@@ -133,7 +136,7 @@ public class IndexFolderIntegrationTests
             //Console.WriteLine($"Количество документов после добавления: {countAfter}");
             
             // Поиск по тестовому запросу
-            var results = await chromaDbService.SearchAsync("искусственный интеллект", 2);
+            var results = await chromaDbService.SearchAsync("о чем поют", 1);
             Console.WriteLine($"Найдено {results.Count()} результатов для запроса 'искусственный интеллект'");
             
             // Assert - проверки
@@ -175,7 +178,8 @@ public class IndexFolderIntegrationTests
         var config = Options.Create(new IndexerConfig());
         
         var httpClient = new HttpClient { BaseAddress = new System.Uri("http://localhost:8000") };
-        var chromaDbService = new ChromaDbService(httpClient, CreateMockOllamaService().Object, chromaLogger);
+        var ragConfig = Options.Create(new RAGConfig());
+        var chromaDbService = new ChromaDbService(httpClient, CreateMockOllamaService().Object, ragConfig, chromaLogger);
         
         var indexerService = new IndexerService(config, chromaDbService, CreateMockOllamaService().Object, indexerLogger);
         var toolsLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ListFilesTool>();
@@ -204,7 +208,8 @@ public class IndexFolderIntegrationTests
         var config = Options.Create(new IndexerConfig());
         
         var httpClient = new HttpClient { BaseAddress = new System.Uri("http://localhost:8000") };
-        var chromaDbService = new ChromaDbService(httpClient, CreateMockOllamaService().Object, chromaLogger);
+        var ragConfig = Options.Create(new RAGConfig());
+        var chromaDbService = new ChromaDbService(httpClient, CreateMockOllamaService().Object, ragConfig, chromaLogger);
         
         var indexerService = new IndexerService(config, chromaDbService, CreateMockOllamaService().Object, indexerLogger);
         var toolsLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ListFilesTool>();
@@ -246,7 +251,8 @@ public class IndexFolderIntegrationTests
         });
         var ollamaService = new OllamaService(ollamaHttpClient, ollamaConfig, ollamaLogger);
         
-        var chromaDbService = new ChromaDbService(httpClient, ollamaService, logger);
+        var ragConfig = Options.Create(new RAGConfig());
+        var chromaDbService = new ChromaDbService(httpClient, ollamaService, ragConfig, logger);
         
         // Создаем тестовые данные с реальными эмбеддингами
         var testChunks = new[]
