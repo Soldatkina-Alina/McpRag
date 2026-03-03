@@ -21,6 +21,7 @@ public class RagState
         Documents = new List<DocumentChunk>();
         ExecutionSteps = new List<ExecutionStep>();
         QueryHistory = new List<string>();
+        AnswerHistory = new List<string>();
     }
 
     /// <summary>
@@ -54,7 +55,7 @@ public class RagState
     public string ErrorMessage { get; set; }
 
     /// <summary>
-    /// Текущий поисковый запрос (может быть переписан или расширен).
+    /// Текущий поисковый запрос (может быть перезаписан или расширен).
     /// </summary>
     public string CurrentQuery { get; set; }
 
@@ -72,6 +73,26 @@ public class RagState
     /// Динамический порог релевантности для текущей попытки.
     /// </summary>
     public float CurrentScoreThreshold { get; set; }
+
+    /// <summary>
+    /// Флаг, указывающий, основан ли ответ только на контексте.
+    /// </summary>
+    public bool IsGrounded { get; set; }
+
+    /// <summary>
+    /// Количество регенераций ответа.
+    /// </summary>
+    public int RegenerationCount { get; set; }
+
+    /// <summary>
+    /// История ответов (все варианты).
+    /// </summary>
+    public List<string> AnswerHistory { get; set; }
+
+    /// <summary>
+    /// Оценка достоверности (0-1), насколько ответ основан на контексте.
+    /// </summary>
+    public float? GroundingScore { get; set; }
 
     /// <summary>
     /// Проверяет, есть ли релевантные документы.

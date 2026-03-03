@@ -14,7 +14,7 @@ namespace McpRag
         /// <summary>
         /// Максимальное количество фрагментов документов для включения в контекст.
         /// </summary>
-        public int MaxChunks { get; set; } = 5;
+        public int MaxChunks { get; set; } = 3;
 
         /// <summary>
         /// Минимальный порог релевантности для включения в контекст.
@@ -37,9 +37,14 @@ namespace McpRag
         public GradeDocumentsConfig GradeDocuments { get; set; } = new();
 
         /// <summary>
-        /// Конфигурация для retry-цикла с переписыванием и расширением запроса.
+        /// Конфигурация для retry-цикла с перезаписью и расширением запроса.
         /// </summary>
         public RetryConfig Retry { get; set; } = new();
+
+        /// <summary>
+        /// Конфигурация для проверки на галлюцинации.
+        /// </summary>
+        public HallucinationConfig Hallucination { get; set; } = new();
     }
 
     /// <summary>
@@ -55,17 +60,43 @@ namespace McpRag
         /// <summary>
         /// Минимальное количество релевантных документов, необходимое для успешного поиска.
         /// </summary>
-        public int MinRelevantCount { get; set; } = 2;
+        public int MinRelevantCount { get; set; } = 1;
 
         /// <summary>
-        /// Включить или отключить автоматическое переписывание запроса перед первым поиском.
+        /// Включить или отключить автоматическое перезапись запроса перед первым поиском.
         /// </summary>
-        public bool EnableQueryRewrite { get; set; } = true;
+        public bool EnableQueryRewrite { get; set; } = false;
 
         /// <summary>
         /// Снижение порога релевантности при каждой дополнительной попытке.
         /// </summary>
         public float ScoreBoostPerRetry { get; set; } = 0.1f;
+    }
+
+    /// <summary>
+    /// Конфигурация для проверки на галлюцинации.
+    /// </summary>
+    public class HallucinationConfig
+    {
+        /// <summary>
+        /// Включить или отключить проверку на галлюцинации.
+        /// </summary>
+        public bool Enabled { get; set; } = true;
+
+        /// <summary>
+        /// Максимальное количество регенераций ответа.
+        /// </summary>
+        public int MaxRegenerations { get; set; } = 1;
+
+        /// <summary>
+        /// Порог уверенности для признания ответа grounded.
+        /// </summary>
+        public float ConfidenceThreshold { get; set; } = 0.7f;
+
+        /// <summary>
+        /// Использовать детальную проверку по предложениям.
+        /// </summary>
+        public bool UseDetailedCheck { get; set; } = false;
     }
 
     /// <summary>

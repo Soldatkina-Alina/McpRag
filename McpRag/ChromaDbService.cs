@@ -178,13 +178,6 @@ public class ChromaDbService : IVectorStoreService
                 i, chunk.Score, chunk.Text.Substring(0, Math.Min(50, chunk.Text.Length)));
         }
 
-        // Устанавливаем высокий скор для тестов
-        foreach (var result in results)
-        {
-            result.Chunk.Score = 0.9f;
-            result.Score = 0.9f;
-        }
-
         _logger.LogInformation("Found {Count} relevant document chunks for query: {Query}",
             results.Count, query);
 

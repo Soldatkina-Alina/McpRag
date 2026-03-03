@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 namespace McpRag;
 
@@ -112,6 +113,24 @@ public class RagGraphService : IRagGraphService
             
             // Шаг 4: Generate (из Задачи 9)
             state = await GenerateNodeAsync(state, ct);
+            
+            // Проверка на галлюцинации
+            state = await HallucinationCheckNodeAsync(state, ct);
+            
+            // Если не grounded и есть попытки - регенерируем
+            if (!state.IsGrounded && state.RegenerationCount < _config.Value.Hallucination.MaxRegenerations)
+            {
+                state = await RegenerateNodeAsync(state, ct);
+                
+                // Проверяем снова (опционально)
+                state = await HallucinationCheckNodeAsync(state, ct);
+            }
+            
+            // Если после регенерации все еще не grounded - добавляем предупреждение
+            if (!state.IsGrounded)
+            {
+                state.Answer += "\n\n⚠️ **Предупреждение**: Ответ может содержать элементы, не найденные в документах.";
+            }
             
             return state;
         }
@@ -234,7 +253,6 @@ public class RagGraphService : IRagGraphService
     private bool HasEnoughRelevantDocuments(RagState state)
     {
         var config = _config.Value.Retry;
-        
         // Используем динамический порог и счетчик релевантных
         var relevantCount = state.Documents.Count(d => 
             d.IsRelevant && d.Score >= state.CurrentScoreThreshold);
@@ -521,6 +539,179 @@ public class RagGraphService : IRagGraphService
                 batch[j].IsRelevant = scores[j] >= config.LLMThreshold;
             }
         }
+    }
+
+    /// <summary>
+    /// Узел графа для проверки на галлюцинации.
+    /// </summary>
+    /// <param name="state">Состояние графа.</param>
+    /// <param name="ct">Токен отмены.</param>
+    /// <returns>Обновленное состояние графа.</returns>
+    private async Task<RagState> HallucinationCheckNodeAsync(RagState state, CancellationToken ct)
+    {
+        var step = new ExecutionStep { NodeName = "HallucinationCheck" };
+        var config = _config.Value.Hallucination;
+        
+        if (!config.Enabled || string.IsNullOrEmpty(state.Answer))
+        {
+            step.Metadata["skipped"] = true;
+            state.ExecutionSteps.Add(step);
+            return state;
+        }
+        
+        try
+        {
+            // Формируем контекст из релевантных документов
+            var context = string.Join("\n\n", state.Documents
+                .Where(d => d.IsRelevant)
+                .Select(d => d.Text));
+            
+            // Промпт для проверки
+            var prompt = $@"
+Ты - эксперт по проверке фактов в RAG системах.
+Проверь, основан ли ответ только на предоставленном контексте.
+
+Контекст (документы):
+{context}
+
+Ответ системы:
+{state.Answer}
+
+Вопрос пользователя: {state.Question}
+
+Инструкция: Оцени, содержит ли ответ информацию, которой нет в контексте.
+Ответь в формате JSON:
+{{
+  ""is_grounded"": true/false,  // true если ответ полностью основан на контексте
+  ""confidence"": 0.0-1.0,      // насколько ты уверен в оценке
+  ""hallucinated_parts"": [      // если есть выдумки, укажи их
+    ""фраза 1"",
+    ""фраза 2""
+  ],
+  ""explanation"": ""краткое объяснение""
+}}";
+            
+            var response = await _ollama.GenerateAsync(prompt, ct);
+            
+            // Парсим JSON ответ (упрощенно - лучше использовать System.Text.Json)
+            try
+            {
+                var result = JsonSerializer.Deserialize<HallucinationResult>(response);
+                state.IsGrounded = result.is_grounded;
+                state.GroundingScore = result.confidence;
+                
+                step.Metadata["is_grounded"] = state.IsGrounded;
+                step.Metadata["confidence"] = result.confidence;
+                step.Metadata["hallucinated_parts"] = result.hallucinated_parts?.Count ?? 0;
+                
+                if (!state.IsGrounded && result.hallucinated_parts != null)
+                {
+                    step.Metadata["examples"] = string.Join("; ", result.hallucinated_parts.Take(3));
+                }
+            }
+            catch
+            {
+                // Fallback: бинарная проверка если JSON не распарсился
+                state.IsGrounded = response.Trim().ToLower().Contains("true") ||
+                                   response.Trim().ToLower().Contains("yes");
+                step.Metadata["fallback"] = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            step.Metadata["error"] = ex.Message;
+            // При ошибке считаем ответ grounded (чтобы не зациклиться)
+            state.IsGrounded = true;
+        }
+        finally
+        {
+            state.ExecutionSteps.Add(step);
+        }
+        
+        return state;
+    }
+
+    /// <summary>
+    /// Результат проверки на галлюцинацию.
+    /// </summary>
+    public class HallucinationResult
+    {
+        /// <summary>
+        /// Флаг, указывающий, основан ли ответ только на контексте.
+        /// </summary>
+        public bool is_grounded { get; set; }
+
+        /// <summary>
+        /// Уверенность в оценке.
+        /// </summary>
+        public float confidence { get; set; }
+
+        /// <summary>
+        /// Части ответа, содержащие галлюцинации.
+        /// </summary>
+        public List<string> hallucinated_parts { get; set; }
+
+        /// <summary>
+        /// Объяснение оценки.
+        /// </summary>
+        public string explanation { get; set; }
+    }
+
+    /// <summary>
+    /// Узел графа для регенерации ответа.
+    /// </summary>
+    /// <param name="state">Состояние графа.</param>
+    /// <param name="ct">Токен отмены.</param>
+    /// <returns>Обновленное состояние графа.</returns>
+    private async Task<RagState> RegenerateNodeAsync(RagState state, CancellationToken ct)
+    {
+        var step = new ExecutionStep { NodeName = "Regenerate" };
+        
+        try
+        {
+            // Сохраняем предыдущий ответ в историю
+            state.AnswerHistory.Add(state.Answer);
+            state.RegenerationCount++;
+            
+            // Формируем более строгий промпт для регенерации
+            var context = string.Join("\n\n", state.Documents
+                .Where(d => d.IsRelevant)
+                .Select(d => d.Text));
+            
+            var prompt = $@"
+Ты - ассистент, который отвечает на вопросы СТРОГО по контексту.
+Предыдущий ответ был признан содержащим выдумки (галлюцинации).
+
+ВАЖНЕЙШИЕ ПРАВИЛА:
+1. НЕ ИСПОЛЬЗУЙ СВОИ ЗНАНИЯ
+2. Отвечай ТОЛЬКО информацией из контекста
+3. Если информации нет в контексте - скажи ""В контексте нет информации""
+4. Каждое утверждение должно быть подтверждено контекстом
+5. Лучше сказать ""не знаю"", чем придумать
+
+Контекст:
+{context}
+
+Вопрос: {state.Question}
+
+Ответ (строго по контексту, без выдумок):";
+            
+            var newAnswer = await _ollama.GenerateAsync(prompt, ct);
+            state.Answer = newAnswer;
+            
+            step.Metadata["regeneration_count"] = state.RegenerationCount;
+            step.Metadata["previous_answer_length"] = state.AnswerHistory.Last().Length;
+        }
+        catch (Exception ex)
+        {
+            step.Metadata["error"] = ex.Message;
+        }
+        finally
+        {
+            state.ExecutionSteps.Add(step);
+        }
+        
+        return state;
     }
 
     /// <summary>

@@ -116,22 +116,22 @@ public class SearchResult
     public float Score { get; set; }
 }
 
-/// <summary>
-/// Extension methods for IVectorStoreService.
-/// </summary>
-public static class VectorStoreServiceExtensions
-{
     /// <summary>
-    /// Searches for relevant document chunks with scores.
+    /// Extension methods for IVectorStoreService.
     /// </summary>
-    /// <param name="vectorStore">The vector store service.</param>
-    /// <param name="query">The search query.</param>
-    /// <param name="topK">Maximum number of results to return.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Relevant document chunks with scores.</returns>
-    public static async Task<List<SearchResult>> SearchWithScoreAsync(this IVectorStoreService vectorStore, string query, int topK, CancellationToken cancellationToken = default)
+    public static class VectorStoreServiceExtensions
     {
-        var results = await vectorStore.SearchAsync(query, topK, cancellationToken);
-        return results.Select(c => new SearchResult { Chunk = c, Score = 0.0f }).ToList();
+        /// <summary>
+        /// Searches for relevant document chunks with scores.
+        /// </summary>
+        /// <param name="vectorStore">The vector store service.</param>
+        /// <param name="query">The search query.</param>
+        /// <param name="topK">Maximum number of results to return.</param>
+        /// <param name="cancellationToken">Cancellation token.</param>
+        /// <returns>Relevant document chunks with scores.</returns>
+        public static async Task<List<SearchResult>> SearchWithScoreAsync(this IVectorStoreService vectorStore, string query, int topK, CancellationToken cancellationToken = default)
+        {
+            var results = await vectorStore.SearchAsync(query, topK, cancellationToken);
+            return results.Select(c => new SearchResult { Chunk = c, Score = c.Score }).ToList();
+        }
     }
-}
