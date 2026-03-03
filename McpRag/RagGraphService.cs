@@ -80,8 +80,8 @@ public class RagGraphService : IRagGraphService
                 
                 // Шаг 3: Оценка релевантности найденных документов через LLM
                 state = await GradeDocumentsNodeAsync(state, ct);
-                
-                // Проверка: достаточно ли документов имеют высокую релевантность?
+
+                // Шаг 4: Проверка: достаточно ли документов имеют высокую релевантность?
                 if (HasEnoughRelevantDocuments(state))
                 {
                     _logger.LogInformation("Найдено достаточное количество релевантных документов ({Count})", 
@@ -89,10 +89,40 @@ public class RagGraphService : IRagGraphService
                     break; // Достаточно документов - выходим из цикла поиска
                 }
                 
-                // Если есть еще попытки - расширяем запрос для поиска более широкого диапазона информации
+                // Оптимизация: быстрый выход при полном отсутствии документов
+                if (state.Documents.Count == 0)
+                {
+                    _logger.LogWarning("Нет документов для оценки, расширяем запрос");
+                    if (state.RetryCount < _config.Value.Retry.MaxRetries)
+                    {
+                        state = await BroadenQueryNodeAsync(state, ct);
+                        continue; // Переходим к следующей итерации
+                    }
+                    else
+                    {
+                        // Достигнут лимит попыток без документов
+                        break;
+                    }
+                }
+                
+                // Оптимизация: умное расширение запроса
                 if (state.RetryCount < _config.Value.Retry.MaxRetries)
                 {
-                    state = await BroadenQueryNodeAsync(state, ct);
+                    // Проверяем, есть ли хоть какие-то документы для оценки
+                    var hasAnyDocuments = state.Documents.Any();
+                    
+                    if (!hasAnyDocuments)
+                    {
+                        // Если документов нет вообще - расширяем запрос
+                        state = await BroadenQueryNodeAsync(state, ct);
+                    }
+                    else
+                    {
+                        // Если документы есть, но не релевантны - можно попробовать улучшить запрос
+                        // или изменить порог релевантности
+                        state.CurrentScoreThreshold *= 0.9f; // Снижаем порог на 10%
+                        _logger.LogInformation("Снижаем порог релевантности до {Threshold}", state.CurrentScoreThreshold);
+                    }
                 }
                 else
                 {
@@ -122,13 +152,13 @@ public class RagGraphService : IRagGraphService
                 return state;
             }
             
-            // Шаг 4: Генерация ответа на основе релевантных документов
+            // Шаг 6: Генерация ответа на основе релевантных документов
             state = await GenerateNodeAsync(state, ct);
             
-            // Шаг 5: Проверка ответа на галлюцинации (информацию, не найденную в контексте)
+            // Шаг 7: Проверка ответа на галлюцинации (информацию, не найденную в контексте)
             state = await HallucinationCheckNodeAsync(state, ct);
-            
-            // Если ответ не соответствует контексту и есть попытки регенерации - повторяем генерацию
+
+            // Шаг 8: Если ответ не соответствует контексту и есть попытки регенерации - повторяем генерацию
             if (!state.IsGrounded && state.RegenerationCount < _config.Value.Hallucination.MaxRegenerations)
             {
                 state = await RegenerateNodeAsync(state, ct);
@@ -410,7 +440,8 @@ public class RagGraphService : IRagGraphService
     }
 
     /// <summary>
-    /// Последовательная оценка документов.
+    /// Параллельная оценка документов.
+    /// Оценивает документы одновременно, используя оптимальное количество потоков.
     /// </summary>
     /// <param name="docs">Список документов для оценки.</param>
     /// <param name="question">Вопрос пользователя.</param>
@@ -422,21 +453,29 @@ public class RagGraphService : IRagGraphService
         GradeDocumentsConfig config,
         CancellationToken ct)
     {
-        foreach (var doc in docs)
-        {
-            try
+        // Используем Parallel.ForEachAsync для параллельной обработки
+        await Parallel.ForEachAsync(
+            docs,
+            new ParallelOptions 
+            { 
+                CancellationToken = ct,
+                MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, 5) // Ограничиваем количество параллельных запросов
+            },
+            async (doc, token) =>
             {
-                doc.LLMScore = await GradeSingleDocumentAsync(doc, question, config, ct);
-                doc.IsRelevant = doc.LLMScore >= config.LLMThreshold;
-            }
-            catch (Exception ex)
-            {
-                doc.GradeError = ex.Message;
-                doc.LLMScore = null;
-                doc.IsRelevant = true; // сохраняем при ошибке
-                _logger.LogWarning(ex, "Failed to grade document {docId}", doc.Id);
-            }
-        }
+                try
+                {
+                    doc.LLMScore = await GradeSingleDocumentAsync(doc, question, config, token);
+                    doc.IsRelevant = doc.LLMScore >= config.LLMThreshold;
+                }
+                catch (Exception ex)
+                {
+                    doc.GradeError = ex.Message;
+                    doc.LLMScore = null;
+                    doc.IsRelevant = true; // сохраняем при ошибке
+                    _logger.LogWarning(ex, "Failed to grade document {docId}", doc.Id);
+                }
+            });
     }
 
     /// <summary>

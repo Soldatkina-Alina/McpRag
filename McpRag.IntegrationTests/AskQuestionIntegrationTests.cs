@@ -84,7 +84,7 @@ public class AskQuestionIntegrationTests
             Console.WriteLine($"Ответ: {result}");
             
             Assert.False(string.IsNullOrEmpty(result));
-            Assert.Contains("собака", result); 
+            Assert.Contains("собачка", result); 
             Assert.DoesNotContain("не найдено информации", result);
             Assert.DoesNotContain("❌", result);
             
