@@ -67,7 +67,10 @@ builder.Services
     .WithTools<ListFilesTool>()
     .WithTools<SearchDocsTool>()
     .WithTools<VectorStoreStatusTool>()
-    .WithTools<AskQuestionTool>();
+    .WithTools<AskQuestionTool>()
+    .WithTools<FindRelevantDocsTool>()
+    .WithTools<SummarizeDocumentTool>()
+    .WithTools<IndexStatusTool>();
 
 var host = builder.Build();
 

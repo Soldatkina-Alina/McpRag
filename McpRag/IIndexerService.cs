@@ -24,4 +24,12 @@ public interface IIndexerService
     /// Clears the list of loaded files.
     /// </summary>
     void ClearLoadedFiles();
+    
+    /// <summary>
+    /// Loads and splits a single document into chunks.
+    /// </summary>
+    /// <param name="filePath">Path to the document file.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>List of document chunks.</returns>
+    Task<List<DocumentChunk>> LoadAndSplitDocumentAsync(string filePath, CancellationToken ct = default);
 }

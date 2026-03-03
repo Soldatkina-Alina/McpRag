@@ -85,7 +85,7 @@ public class RagGraphService : IRagGraphService
                 if (HasEnoughRelevantDocuments(state))
                 {
                     _logger.LogInformation("Найдено достаточное количество релевантных документов ({Count})", 
-                        state.Documents.Count(d => d.IsRelevant));
+                        state.Documents.Count(d => d.IsRelevant && d.Score >= state.CurrentScoreThreshold));
                     break; // Достаточно документов - выходим из цикла поиска
                 }
                 
@@ -121,6 +121,7 @@ public class RagGraphService : IRagGraphService
                         // Если документы есть, но не релевантны - можно попробовать улучшить запрос
                         // или изменить порог релевантности
                         state.CurrentScoreThreshold *= 0.9f; // Снижаем порог на 10%
+                        state.RetryCount++;
                         _logger.LogInformation("Снижаем порог релевантности до {Threshold}", state.CurrentScoreThreshold);
                     }
                 }
@@ -143,7 +144,7 @@ public class RagGraphService : IRagGraphService
             }
             
             // Если после всех попыток не найдено ни одного релевантного документа
-            if (!state.Documents.Any(d => d.IsRelevant))
+            if (!state.Documents.Any(d => d.IsRelevant && d.Score >= state.CurrentScoreThreshold))
             {
                 state.Answer = $"❌ После {state.RetryCount + 1} попыток не найдено релевантных документов.\n" +
                                $"Последний запрос: '{state.CurrentQuery}'\n" +

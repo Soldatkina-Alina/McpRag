@@ -4,41 +4,6 @@ using System.Threading.Tasks;
 
 namespace McpRag;
 
-/// <summary>
-/// Interface for vector store operations.
-/// </summary>
-public interface IVectorStoreService
-{
-    /// <summary>
-    /// Adds document chunks to the vector store.
-    /// </summary>
-    /// <param name="chunks">The document chunks to add.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    Task AddDocumentsAsync(IEnumerable<DocumentChunk> chunks, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Searches for relevant document chunks based on a query.
-    /// </summary>
-    /// <param name="query">The search query.</param>
-    /// <param name="topK">Maximum number of results to return.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Relevant document chunks.</returns>
-    Task<IEnumerable<DocumentChunk>> SearchAsync(string query, int topK, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Clears all documents from the vector store.
-    /// </summary>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    Task ClearAsync(CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Gets the count of documents in the vector store.
-    /// </summary>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Number of documents.</returns>
-    Task<int> CountAsync(CancellationToken cancellationToken = default);
-}
-
     /// <summary>
     /// Представляет фрагмент документа с векторным представлением.
     /// </summary>
@@ -117,6 +82,104 @@ public class SearchResult
 }
 
     /// <summary>
+    /// Информация о коллекции в векторном хранилище.
+    /// </summary>
+    public class CollectionInfo
+    {
+        /// <summary>
+        /// Название коллекции.
+        /// </summary>
+        public string Name { get; set; }
+
+        /// <summary>
+        /// Количество документов в коллекции.
+        /// </summary>
+        public int Count { get; set; }
+
+        /// <summary>
+        /// Время создания коллекции.
+        /// </summary>
+        public System.DateTime Created { get; set; }
+    }
+
+    /// <summary>
+    /// Статистика индекса.
+    /// </summary>
+    public class IndexStatistics
+    {
+        /// <summary>
+        /// Общее количество чанков.
+        /// </summary>
+        public int TotalChunks { get; set; }
+
+        /// <summary>
+        /// Общее количество файлов.
+        /// </summary>
+        public int TotalFiles { get; set; }
+
+        /// <summary>
+        /// Время последней индексации.
+        /// </summary>
+        public System.DateTime? LastIndexed { get; set; }
+
+        /// <summary>
+        /// Список коллекций в хранилище.
+        /// </summary>
+        public List<CollectionInfo> Collections { get; set; } = new();
+    }
+
+/// <summary>
+/// Interface for vector store operations.
+/// </summary>
+public interface IVectorStoreService
+{
+    /// <summary>
+    /// Adds document chunks to the vector store.
+    /// </summary>
+    /// <param name="chunks">The document chunks to add.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task AddDocumentsAsync(IEnumerable<DocumentChunk> chunks, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Searches for relevant document chunks based on a query.
+    /// </summary>
+    /// <param name="query">The search query.</param>
+    /// <param name="topK">Maximum number of results to return.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Relevant document chunks.</returns>
+    Task<IEnumerable<DocumentChunk>> SearchAsync(string query, int topK, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Searches for relevant document chunks with scores.
+    /// </summary>
+    /// <param name="query">The search query.</param>
+    /// <param name="topK">Maximum number of results to return.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Relevant document chunks with scores.</returns>
+    Task<List<SearchResult>> SearchWithScoreAsync(string query, int topK, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Clears all documents from the vector store.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task ClearAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets the count of documents in the vector store.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Number of documents.</returns>
+    Task<int> CountAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets statistics about the index.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Index statistics.</returns>
+    Task<IndexStatistics> GetStatisticsAsync(CancellationToken cancellationToken = default);
+}
+
+    /// <summary>
     /// Extension methods for IVectorStoreService.
     /// </summary>
     public static class VectorStoreServiceExtensions
@@ -129,7 +192,7 @@ public class SearchResult
         /// <param name="topK">Maximum number of results to return.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>Relevant document chunks with scores.</returns>
-        public static async Task<List<SearchResult>> SearchWithScoreAsync(this IVectorStoreService vectorStore, string query, int topK, CancellationToken cancellationToken = default)
+        public static async Task<List<SearchResult>> SearchWithScoreAsyncExtension(this IVectorStoreService vectorStore, string query, int topK, CancellationToken cancellationToken = default)
         {
             var results = await vectorStore.SearchAsync(query, topK, cancellationToken);
             return results.Select(c => new SearchResult { Chunk = c, Score = c.Score }).ToList();

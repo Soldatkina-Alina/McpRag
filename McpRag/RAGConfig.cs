@@ -19,7 +19,7 @@ namespace McpRag
         /// <summary>
         /// Минимальный порог релевантности для включения в контекст.
         /// </summary>
-        public float MinRelevanceScore { get; set; } = 0.7f;
+        public float MinRelevanceScore { get; set; } = 0.55f;
 
         /// <summary>
         /// Максимальное количество токенов в контексте.
@@ -77,7 +77,7 @@ namespace McpRag
         /// <summary>
         /// Максимальное количество попыток поиска.
         /// </summary>
-        public int MaxRetries { get; set; } = 2;
+        public int MaxRetries { get; set; } = 1;
 
         /// <summary>
         /// Минимальное количество релевантных документов, необходимое для успешного поиска.

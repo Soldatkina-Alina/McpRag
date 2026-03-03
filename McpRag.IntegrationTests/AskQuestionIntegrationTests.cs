@@ -47,7 +47,7 @@ public class AskQuestionIntegrationTests
         var ragConfig = Options.Create(new RAGConfig
         {
             MaxChunks = 2,
-            MinRelevanceScore = 0.5f, // Более лояльный порог
+            MinRelevanceScore = 0.55f, // Более лояльный порог
             MaxContextTokens = 2000,
             IncludeMetadataInContext = true,
             GradeDocuments = new GradeDocumentsConfig
@@ -135,7 +135,7 @@ public class AskQuestionIntegrationTests
         var ragConfig = Options.Create(new RAGConfig
         {
             MaxChunks = 2,
-            MinRelevanceScore = 0.5f, // Более лояльный порог
+            MinRelevanceScore = 0.55f, // Более лояльный порог
             MaxContextTokens = 2000,
             IncludeMetadataInContext = true,
             GradeDocuments = new GradeDocumentsConfig
@@ -175,7 +175,7 @@ public class AskQuestionIntegrationTests
             Console.WriteLine($"Ответ: {result}");
             
             Assert.False(string.IsNullOrEmpty(result));
-            Assert.Contains("не найдено информации", result);
+            Assert.Contains("не найдено релевантных документов", result);
             Assert.Contains("❌", result);
             Assert.DoesNotContain("Моня", result);
             Assert.DoesNotContain("Рекс", result);

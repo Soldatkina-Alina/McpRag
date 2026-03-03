@@ -242,4 +242,73 @@ public class IndexerService : IIndexerService
         _loadedFiles.Clear();
         _logger.LogInformation("Cleared loaded files");
     }
+    
+    /// <summary>
+    /// Загружает и разбивает один документ на чанки.
+    /// </summary>
+    /// <param name="filePath">Путь к документу.</param>
+    /// <param name="ct">Токен отмены.</param>
+    /// <returns>Список чанков документа.</returns>
+    public async Task<List<DocumentChunk>> LoadAndSplitDocumentAsync(string filePath, CancellationToken ct = default)
+    {
+        var fileInfo = new FileInfo(filePath);
+        
+        // Check if file exists
+        if (!fileInfo.Exists)
+        {
+            throw new FileNotFoundException("File not found", filePath);
+        }
+        
+        // Check if file extension is supported
+        if (!_config.SupportedExtensions.Contains(fileInfo.Extension.ToLower()))
+        {
+            _logger.LogWarning("Skipping file with unsupported extension: {FilePath}", filePath);
+            return new List<DocumentChunk>();
+        }
+        
+        // Check file size
+        if (fileInfo.Length > _config.MaxFileSizeMB * 1024 * 1024)
+        {
+            _logger.LogWarning("Skipping large file: {FilePath} ({Size} bytes)", filePath, fileInfo.Length);
+            return new List<DocumentChunk>();
+        }
+        
+        try
+        {
+            _logger.LogDebug("Reading file: {FilePath}", filePath);
+            var content = await File.ReadAllTextAsync(filePath, ct);
+            
+            // Split file into chunks
+            var fileChunks = SplitDocumentIntoChunks(content);
+            
+            var chunks = new List<DocumentChunk>();
+            
+            foreach (var chunk in fileChunks)
+            {
+                // Generate embedding for each chunk
+                var embedding = await _ollama.GenerateEmbeddingsAsync(chunk, ct);
+                
+                chunks.Add(new DocumentChunk
+                {
+                    Text = chunk,
+                    Source = filePath,
+                    ChunkIndex = fileChunks.IndexOf(chunk),
+                    Embedding = embedding,
+                    Metadata = new Dictionary<string, object>
+                    {
+                        ["file_name"] = fileInfo.Name,
+                        ["extension"] = fileInfo.Extension,
+                        ["size"] = fileInfo.Length
+                    }
+                });
+            }
+            
+            return chunks;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading and splitting document: {FilePath}", filePath);
+            return new List<DocumentChunk>();
+        }
+    }
 }

@@ -295,6 +295,171 @@ public class ChromaDbService : IVectorStoreService
     }
 
     /// <summary>
+    /// Возвращает статистику по индексу.
+    /// </summary>
+    /// <param name="cancellationToken">Токен отмены операции.</param>
+    /// <returns>Статистика по индексу.</returns>
+    /// <exception cref="HttpRequestException">Выбрасывается, если запрос к API завершился с ошибкой.</exception>
+    public async Task<IndexStatistics> GetStatisticsAsync(CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Getting index statistics");
+
+        var stats = new IndexStatistics();
+
+        // Get collection ID
+        var collectionId = await GetCollectionIdAsync(cancellationToken);
+        if (string.IsNullOrEmpty(collectionId))
+        {
+            _logger.LogInformation("Collection {Collection} not found, returning empty statistics", _collectionName);
+            return stats;
+        }
+
+        // Get all documents to collect statistics
+        var allDocsRequest = new { };
+        var allDocsJson = JsonSerializer.Serialize(allDocsRequest);
+        var allDocsContent = new StringContent(allDocsJson, System.Text.Encoding.UTF8, "application/json");
+        
+        var allDocsResponse = await _httpClient.PostAsync($"{_collectionsEndpoint}/{collectionId}/get", allDocsContent, cancellationToken);
+        
+        if (!allDocsResponse.IsSuccessStatusCode)
+        {
+            var errorContent = await allDocsResponse.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogError("Failed to get all documents for statistics: {StatusCode} - {Content}",
+                allDocsResponse.StatusCode, errorContent);
+            throw new HttpRequestException($"Failed to get documents: {allDocsResponse.StatusCode} - {errorContent}");
+        }
+        
+        var allDocsResult = await allDocsResponse.Content.ReadAsStringAsync(cancellationToken);
+        var getResponse = JsonDocument.Parse(allDocsResult);
+        
+        // Get collection information
+        var collectionsResponse = await _httpClient.GetAsync(_collectionsEndpoint, cancellationToken);
+        if (collectionsResponse.IsSuccessStatusCode)
+        {
+            var collectionsContent = await collectionsResponse.Content.ReadAsStringAsync(cancellationToken);
+            var collections = JsonSerializer.Deserialize<List<ChromaCollection>>(collectionsContent);
+            
+            foreach (var collection in collections ?? new List<ChromaCollection>())
+            {
+                var collectionStats = new CollectionInfo
+                {
+                    Name = collection.Name,
+                    Count = await GetCollectionDocumentCountAsync(collection.Id, cancellationToken),
+                    Created = DateTime.UtcNow // ChromaDB doesn't return creation time, using current time as fallback
+                };
+                
+                stats.Collections.Add(collectionStats);
+            }
+        }
+        
+        if (getResponse.RootElement.TryGetProperty("ids", out var idsElement) && idsElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var idElement in idsElement.EnumerateArray())
+            {
+                if (idElement.ValueKind == JsonValueKind.String)
+                {
+                    stats.TotalChunks++;
+                }
+                else if (idElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var nestedId in idElement.EnumerateArray())
+                    {
+                        if (nestedId.ValueKind == JsonValueKind.String)
+                        {
+                            stats.TotalChunks++;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (getResponse.RootElement.TryGetProperty("metadatas", out var metadatasElement) && metadatasElement.ValueKind == JsonValueKind.Array)
+        {
+            var uniqueFiles = new HashSet<string>();
+            DateTime? lastIndexed = null;
+            
+            foreach (var metadataElement in metadatasElement.EnumerateArray())
+            {
+                if (metadataElement.ValueKind == JsonValueKind.Object)
+                {
+                    // Extract source (file path) to count unique files
+                    if (metadataElement.TryGetProperty("source", out var sourceElement) && 
+                        sourceElement.ValueKind == JsonValueKind.String)
+                    {
+                        uniqueFiles.Add(sourceElement.GetString());
+                    }
+                    
+                    // Extract indexed_at to find last indexing time
+                    if (metadataElement.TryGetProperty("indexed_at", out var indexedAtElement) && 
+                        indexedAtElement.ValueKind == JsonValueKind.String)
+                    {
+                        if (DateTime.TryParse(indexedAtElement.GetString(), out var indexedAt))
+                        {
+                            if (!lastIndexed.HasValue || indexedAt > lastIndexed.Value)
+                            {
+                                lastIndexed = indexedAt;
+                            }
+                        }
+                    }
+                }
+                else if (metadataElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var nestedMetadata in metadataElement.EnumerateArray())
+                    {
+                        if (nestedMetadata.ValueKind == JsonValueKind.Object)
+                        {
+                            // Extract source (file path) to count unique files
+                            if (nestedMetadata.TryGetProperty("source", out var sourceElement) && 
+                                sourceElement.ValueKind == JsonValueKind.String)
+                            {
+                                uniqueFiles.Add(sourceElement.GetString());
+                            }
+                            
+                            // Extract indexed_at to find last indexing time
+                            if (nestedMetadata.TryGetProperty("indexed_at", out var indexedAtElement) && 
+                                indexedAtElement.ValueKind == JsonValueKind.String)
+                            {
+                                if (DateTime.TryParse(indexedAtElement.GetString(), out var indexedAt))
+                                {
+                                    if (!lastIndexed.HasValue || indexedAt > lastIndexed.Value)
+                                    {
+                                        lastIndexed = indexedAt;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            stats.TotalFiles = uniqueFiles.Count;
+            stats.LastIndexed = lastIndexed;
+        }
+        
+        _logger.LogInformation("Index statistics: {TotalChunks} chunks, {TotalFiles} files", 
+            stats.TotalChunks, stats.TotalFiles);
+            
+        return stats;
+    }
+    
+    private async Task<int> GetCollectionDocumentCountAsync(string collectionId, CancellationToken cancellationToken)
+    {
+        var response = await _httpClient.GetAsync($"{_collectionsEndpoint}/{collectionId}/count", cancellationToken);
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Failed to get count for collection {Id}: {StatusCode}", 
+                collectionId, response.StatusCode);
+            return 0;
+        }
+        
+        var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+        int.TryParse(responseContent, out int count);
+        
+        return count;
+    }
+
+    /// <summary>
     /// Получает идентификатор коллекции по имени.
     /// </summary>
     /// <param name="cancellationToken">Токен отмены операции.</param>
