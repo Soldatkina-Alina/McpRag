@@ -153,18 +153,45 @@ public class RagGraphService : IRagGraphService
             }
             
             // Шаг 6: Генерация ответа на основе релевантных документов
-            state = await GenerateNodeAsync(state, ct);
+            if (_config.Value.EnableAnswerGeneration)
+            {
+                state = await GenerateNodeAsync(state, ct);
+            }
+            else
+            {
+                // Если генерация отключена, формируем ответ из найденных документов
+                state.Answer = "Найденные документы:\n" + 
+                              string.Join("\n\n", state.Documents
+                                  .Where(d => d.IsRelevant)
+                                  .Select((d, i) => $"{i + 1}. {d.Text}"));
+                state.IsGrounded = true; // Ответ основан на документах
+                state.GroundingScore = 1.0f; // Максимальная уверенность
+            }
             
             // Шаг 7: Проверка ответа на галлюцинации (информацию, не найденную в контексте)
-            state = await HallucinationCheckNodeAsync(state, ct);
+            if (_config.Value.EnableHallucinationCheck && !string.IsNullOrEmpty(state.Answer))
+            {
+                state = await HallucinationCheckNodeAsync(state, ct);
+            }
+            else
+            {
+                // Если проверка отключена, считаем ответ grounded
+                state.IsGrounded = true;
+                state.GroundingScore = 1.0f;
+            }
 
             // Шаг 8: Если ответ не соответствует контексту и есть попытки регенерации - повторяем генерацию
-            if (!state.IsGrounded && state.RegenerationCount < _config.Value.Hallucination.MaxRegenerations)
+            if (_config.Value.EnableRegeneration && 
+                !state.IsGrounded && 
+                state.RegenerationCount < _config.Value.Hallucination.MaxRegenerations)
             {
                 state = await RegenerateNodeAsync(state, ct);
                 
                 // Проверяем снова на галлюцинации
-                state = await HallucinationCheckNodeAsync(state, ct);
+                if (_config.Value.EnableHallucinationCheck)
+                {
+                    state = await HallucinationCheckNodeAsync(state, ct);
+                }
             }
             
             // Если после регенерации ответ все еще не соответствует контексту - добавляем предупреждение

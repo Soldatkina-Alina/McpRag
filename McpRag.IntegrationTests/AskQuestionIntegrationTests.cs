@@ -134,7 +134,7 @@ public class AskQuestionIntegrationTests
         // Создаем RAGConfig
         var ragConfig = Options.Create(new RAGConfig
         {
-            MaxChunks = 5,
+            MaxChunks = 2,
             MinRelevanceScore = 0.5f, // Более лояльный порог
             MaxContextTokens = 2000,
             IncludeMetadataInContext = true,

@@ -38,6 +38,22 @@ namespace McpRag
         public float Temperature { get; set; } = 250.0f;
 
         /// <summary>
+        /// Включена ли генерация ответа на основе найденных документов.
+        /// Если отключено, возвращается только список найденных документов.
+        /// </summary>
+        public bool EnableAnswerGeneration { get; set; } = true;
+
+        /// <summary>
+        /// Включена ли проверка на галлюцинации.
+        /// </summary>
+        public bool EnableHallucinationCheck { get; set; } = true;
+
+        /// <summary>
+        /// Включена ли регенерация ответа при галлюцинациях.
+        /// </summary>
+        public bool EnableRegeneration { get; set; } = true;
+
+        /// <summary>
         /// Конфигурация для оценки документов через LLM.
         /// </summary>
         public GradeDocumentsConfig GradeDocuments { get; set; } = new();
