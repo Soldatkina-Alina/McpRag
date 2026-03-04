@@ -56,7 +56,7 @@ public class ChromaDbService : IVectorStoreService
     /// <exception cref="HttpRequestException">Выбрасывается, если запрос к API завершился с ошибкой.</exception>
     public async Task AddDocumentsAsync(IEnumerable<DocumentChunk> chunks, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Adding {Count} document chunks to ChromaDB collection: {Collection}",
+        _logger.LogInformation("Добавление {Count} фрагментов документов в коллекцию ChromaDB: {Collection}",
             chunks.Count(), _collectionName);
 
         // Get collection ID, create if not exists
@@ -85,12 +85,12 @@ public class ChromaDbService : IVectorStoreService
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("Failed to add documents to ChromaDB: {StatusCode} - {Content}",
+            _logger.LogError("Ошибка при добавлении документов в ChromaDB: {StatusCode} - {Content}",
                 response.StatusCode, errorContent);
-            throw new HttpRequestException($"Failed to add documents: {response.StatusCode} - {errorContent}");
+            throw new HttpRequestException($"Ошибка при добавлении документов: {response.StatusCode} - {errorContent}");
         }
 
-        _logger.LogInformation("Successfully added {Count} document chunks to ChromaDB", chunks.Count());
+        _logger.LogInformation("Успешно добавлено {Count} фрагментов документов в ChromaDB", chunks.Count());
     }
 
     /// <summary>
@@ -117,14 +117,14 @@ public class ChromaDbService : IVectorStoreService
     /// <exception cref="HttpRequestException">Выбрасывается, если запрос к API завершился с ошибкой.</exception>
     public async Task<List<SearchResult>> SearchWithScoreAsync(string query, int topK, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Searching for {TopK} relevant documents with query: {Query}",
+        _logger.LogInformation("Поиск {TopK} релевантных документов по запросу: {Query}",
             topK, query);
 
         // Get collection ID
         var collectionId = await GetCollectionIdAsync(cancellationToken);
         if (string.IsNullOrEmpty(collectionId))
         {
-            _logger.LogWarning("Collection {Collection} not found, returning empty results", _collectionName);
+            _logger.LogWarning("Коллекция {Collection} не найдена, возврат пустых результатов", _collectionName);
             return new List<SearchResult>();
         }
 
@@ -144,9 +144,9 @@ public class ChromaDbService : IVectorStoreService
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("Failed to search ChromaDB: {StatusCode} - {Content}",
+            _logger.LogError("Ошибка при поиске в ChromaDB: {StatusCode} - {Content}",
                 response.StatusCode, errorContent);
-            throw new HttpRequestException($"Failed to search: {response.StatusCode} - {errorContent}");
+            throw new HttpRequestException($"Ошибка при поиске: {response.StatusCode} - {errorContent}");
         }
 
         var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -154,7 +154,7 @@ public class ChromaDbService : IVectorStoreService
 
         if (searchResponse == null)
         {
-            _logger.LogWarning("No search results found for query: {Query}", query);
+            _logger.LogWarning("Нет результатов поиска для запроса: {Query}", query);
             return new List<SearchResult>();
         }
 
@@ -181,11 +181,11 @@ public class ChromaDbService : IVectorStoreService
                 results.Add(new SearchResult { Chunk = chunk, Score = 0.9f });
             }
             
-            _logger.LogDebug("Chunk {Index} - Score: {Score:F2}, Text: {Text}", 
+            _logger.LogDebug("Фрагмент {Index} - релевантность: {Score:F2}, Текст: {Text}", 
                 i, chunk.Score, chunk.Text.Substring(0, Math.Min(50, chunk.Text.Length)));
         }
 
-        _logger.LogInformation("Found {Count} relevant document chunks for query: {Query}",
+        _logger.LogInformation("Найдено {Count} релевантных фрагментов документов по запросу: {Query}",
             results.Count, query);
 
         return results;
@@ -198,13 +198,13 @@ public class ChromaDbService : IVectorStoreService
     /// <exception cref="HttpRequestException">Выбрасывается, если запрос к API завершился с ошибкой.</exception>
     public async Task ClearAsync(CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Clearing all documents from ChromaDB collection: {Collection}", _collectionName);
+        _logger.LogInformation("Очистка всех документов из коллекции ChromaDB: {Collection}", _collectionName);
 
         // Get collection ID
         var collectionId = await GetCollectionIdAsync(cancellationToken);
         if (string.IsNullOrEmpty(collectionId))
         {
-            _logger.LogWarning("Collection {Collection} not found, skipping clear operation", _collectionName);
+            _logger.LogWarning("Коллекция {Collection} не найдена, пропуск операции очистки", _collectionName);
             return;
         }
 
@@ -218,9 +218,9 @@ public class ChromaDbService : IVectorStoreService
         if (!allDocsResponse.IsSuccessStatusCode)
         {
             var errorContent = await allDocsResponse.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("Failed to get all documents for clearing: {StatusCode} - {Content}",
+            _logger.LogError("Ошибка при получении всех документов для очистки: {StatusCode} - {Content}",
                 allDocsResponse.StatusCode, errorContent);
-            throw new HttpRequestException($"Failed to get documents: {allDocsResponse.StatusCode} - {errorContent}");
+            throw new HttpRequestException($"Ошибка при получении документов: {allDocsResponse.StatusCode} - {errorContent}");
         }
         
         var allDocsResult = await allDocsResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -240,7 +240,7 @@ public class ChromaDbService : IVectorStoreService
 
         if (ids.Count == 0)
         {
-            _logger.LogInformation("Collection {Collection} is already empty", _collectionName);
+            _logger.LogInformation("Коллекция {Collection} уже пустая", _collectionName);
             return;
         }
 
@@ -254,12 +254,12 @@ public class ChromaDbService : IVectorStoreService
         if (!deleteResponse.IsSuccessStatusCode)
         {
             var errorContent = await deleteResponse.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("Failed to clear ChromaDB collection: {StatusCode} - {Content}",
+            _logger.LogError("Ошибка при очистке коллекции ChromaDB: {StatusCode} - {Content}",
                 deleteResponse.StatusCode, errorContent);
-            throw new HttpRequestException($"Failed to clear collection: {deleteResponse.StatusCode} - {errorContent}");
+            throw new HttpRequestException($"Ошибка при очистке коллекции: {deleteResponse.StatusCode} - {errorContent}");
         }
 
-        _logger.LogInformation("Successfully cleared all documents from ChromaDB collection: {Count} documents deleted", ids.Count);
+        _logger.LogInformation("Успешно очищена коллекция ChromaDB: {Count} документов удалено", ids.Count);
     }
 
     /// <summary>
@@ -270,13 +270,13 @@ public class ChromaDbService : IVectorStoreService
     /// <exception cref="HttpRequestException">Выбрасывается, если запрос к API завершился с ошибкой.</exception>
     public async Task<int> CountAsync(CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Getting document count from ChromaDB collection: {Collection}", _collectionName);
+        _logger.LogInformation("Получение количества документов из коллекции ChromaDB: {Collection}", _collectionName);
 
         // Get collection ID
         var collectionId = await GetCollectionIdAsync(cancellationToken);
         if (string.IsNullOrEmpty(collectionId))
         {
-            _logger.LogInformation("Collection {Collection} not found, returning 0", _collectionName);
+            _logger.LogInformation("Коллекция {Collection} не найдена, возврат 0", _collectionName);
             return 0;
         }
 
@@ -285,15 +285,15 @@ public class ChromaDbService : IVectorStoreService
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("Failed to get document count: {StatusCode} - {Content}",
+            _logger.LogError("Ошибка при получении количества документов: {StatusCode} - {Content}",
                 response.StatusCode, errorContent);
-            throw new HttpRequestException($"Failed to get count: {response.StatusCode} - {errorContent}");
+            throw new HttpRequestException($"Ошибка при получении количества: {response.StatusCode} - {errorContent}");
         }
 
         var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
         int.TryParse(responseContent, out int count);
 
-        _logger.LogInformation("ChromaDB collection contains {Count} documents", count);
+        _logger.LogInformation("Коллекция ChromaDB содержит {Count} документов", count);
 
         return count;
     }
@@ -306,7 +306,7 @@ public class ChromaDbService : IVectorStoreService
     /// <exception cref="HttpRequestException">Выбрасывается, если запрос к API завершился с ошибкой.</exception>
     public async Task<IndexStatistics> GetStatisticsAsync(CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Getting index statistics");
+        _logger.LogInformation("Получение статистики по индексу");
 
         var stats = new IndexStatistics();
 
@@ -314,7 +314,7 @@ public class ChromaDbService : IVectorStoreService
         var collectionId = await GetCollectionIdAsync(cancellationToken);
         if (string.IsNullOrEmpty(collectionId))
         {
-            _logger.LogInformation("Collection {Collection} not found, returning empty statistics", _collectionName);
+            _logger.LogInformation("Коллекция {Collection} не найдена, возврат пустой статистики", _collectionName);
             return stats;
         }
 
@@ -328,9 +328,9 @@ public class ChromaDbService : IVectorStoreService
         if (!allDocsResponse.IsSuccessStatusCode)
         {
             var errorContent = await allDocsResponse.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("Failed to get all documents for statistics: {StatusCode} - {Content}",
+            _logger.LogError("Ошибка при получении всех документов для статистики: {StatusCode} - {Content}",
                 allDocsResponse.StatusCode, errorContent);
-            throw new HttpRequestException($"Failed to get documents: {allDocsResponse.StatusCode} - {errorContent}");
+            throw new HttpRequestException($"Ошибка при получении документов: {allDocsResponse.StatusCode} - {errorContent}");
         }
         
         var allDocsResult = await allDocsResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -440,7 +440,7 @@ public class ChromaDbService : IVectorStoreService
             stats.LastIndexed = lastIndexed;
         }
         
-        _logger.LogInformation("Index statistics: {TotalChunks} chunks, {TotalFiles} files", 
+        _logger.LogInformation("Статистика индекса: {TotalChunks} фрагментов, {TotalFiles} файлов", 
             stats.TotalChunks, stats.TotalFiles);
             
         return stats;
@@ -452,7 +452,7 @@ public class ChromaDbService : IVectorStoreService
         
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Failed to get count for collection {Id}: {StatusCode}", 
+            _logger.LogWarning("Ошибка при получении количества для коллекции {Id}: {StatusCode}", 
                 collectionId, response.StatusCode);
             return 0;
         }
@@ -470,13 +470,13 @@ public class ChromaDbService : IVectorStoreService
     /// <returns>Идентификатор коллекции или null, если коллекция не найдена.</returns>
     private async Task<string> GetCollectionIdAsync(CancellationToken cancellationToken)
     {
-        _logger.LogDebug("Getting collection ID for {Collection}", _collectionName);
+        _logger.LogDebug("Получение идентификатора коллекции для {Collection}", _collectionName);
 
         var response = await _httpClient.GetAsync(_collectionsEndpoint, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogError("Failed to get collections: {StatusCode} - {Content}",
+            _logger.LogError("Ошибка при получении списка коллекций: {StatusCode} - {Content}",
                 response.StatusCode, await response.Content.ReadAsStringAsync(cancellationToken));
             return null;
         }
@@ -503,7 +503,7 @@ public class ChromaDbService : IVectorStoreService
             return collectionId;
         }
 
-        _logger.LogInformation("Creating ChromaDB collection: {Collection}", _collectionName);
+        _logger.LogInformation("Создание коллекции в ChromaDB: {Collection}", _collectionName);
 
         var request = new
         {
@@ -524,17 +524,17 @@ public class ChromaDbService : IVectorStoreService
             // If collection already exists, return existing ID
             if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
             {
-                _logger.LogWarning("Collection {Collection} already exists, getting existing ID", _collectionName);
+                _logger.LogWarning("Коллекция {Collection} уже существует, получение существующего идентификатора", _collectionName);
                 return await GetCollectionIdAsync(cancellationToken);
             }
 
             var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            _logger.LogError("Failed to create collection {Collection}: {StatusCode} - {Content}",
+            _logger.LogError("Ошибка при создании коллекции {Collection}: {StatusCode} - {Content}",
                 _collectionName, response.StatusCode, errorContent);
-            throw new HttpRequestException($"Failed to create collection: {response.StatusCode} - {errorContent}");
+            throw new HttpRequestException($"Ошибка при создании коллекции: {response.StatusCode} - {errorContent}");
         }
 
-        _logger.LogInformation("Collection {Collection} created successfully", _collectionName);
+        _logger.LogInformation("Коллекция {Collection} успешно создана", _collectionName);
 
         // Get ID of newly created collection
         return await GetCollectionIdAsync(cancellationToken);

@@ -77,7 +77,7 @@ public class RagGraphService : IRagGraphService
             {
                 // Шаг 2: Поиск документов в векторном хранилище по текущему запросу
                 state = await SearchNodeAsync(state, ct);
-                
+               
                 // Шаг 3: Оценка релевантности найденных документов через LLM
                 state = await GradeDocumentsNodeAsync(state, ct);
 

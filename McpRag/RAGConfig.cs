@@ -14,7 +14,7 @@ namespace McpRag
         /// <summary>
         /// Максимальное количество фрагментов документов для включения в контекст.
         /// </summary>
-        public int MaxChunks { get; set; } = 3;
+        public int MaxChunks { get; set; } = 2;
 
         /// <summary>
         /// Минимальный порог релевантности для включения в контекст.
@@ -113,7 +113,7 @@ namespace McpRag
         /// <summary>
         /// Порог уверенности для признания ответа grounded.
         /// </summary>
-        public float ConfidenceThreshold { get; set; } = 0.7f;
+        public float ConfidenceThreshold { get; set; } = 0.6f;
 
         /// <summary>
         /// Использовать детальную проверку по предложениям.
@@ -134,12 +134,12 @@ namespace McpRag
         /// <summary>
         /// Порог Score от ChromaDB для пропуска оценки LLM.
         /// </summary>
-        public float ScoreThreshold { get; set; } = 0.9f;
+        public float ScoreThreshold { get; set; } = 0.6f;
 
         /// <summary>
         /// Порог оценки LLM для определения релевантности.
         /// </summary>
-        public float LLMThreshold { get; set; } = 0.7f;
+        public float LLMThreshold { get; set; } = 0.6f;
 
         /// <summary>
         /// Использовать бинарную оценку (yes/no) вместо вещественного числа.

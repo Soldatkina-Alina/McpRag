@@ -80,7 +80,7 @@ public class AskQuestionIntegrationTests
         try
         {
             // Вопрос с существующей информацией в docs/test_docs/
-            var question = "собачка";
+            var question = "самая красивая кличка";
             var result = await askQuestionTool.AskQuestion(question);
             
             // Assert
@@ -88,7 +88,7 @@ public class AskQuestionIntegrationTests
             Console.WriteLine($"Ответ: {result}");
             
             Assert.False(string.IsNullOrEmpty(result));
-            Assert.Contains("собачка", result); 
+            Assert.Contains("Моня", result); 
             Assert.DoesNotContain("не найдено информации", result);
             Assert.DoesNotContain("❌", result);
             
