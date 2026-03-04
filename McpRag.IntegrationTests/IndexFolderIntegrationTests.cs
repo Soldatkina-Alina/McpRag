@@ -29,13 +29,29 @@ public class IndexFolderIntegrationTests
         var ragConfig = Options.Create(new RAGConfig());
         
         var httpClient = new HttpClient { BaseAddress = new System.Uri("http://localhost:8000") };
-        var chromaDbService = new ChromaDbService(httpClient, CreateMockOllamaService().Object, ragConfig, chromaLogger);
-        
-        var indexerService = new IndexerService(indexerConfig, chromaDbService, CreateMockOllamaService().Object, indexerLogger);
+        var vectorStoreConfig = Options.Create(new VectorStoreConfig
+        {
+            ConnectionString = "http://localhost:8000"
+        });
+        var chromaDbService = new ChromaDbService(httpClient, CreateMockOllamaService().Object, vectorStoreConfig, ragConfig, chromaLogger);
+        // Создаем реальный HttpClient для Ollama
+        var ollamaHttpClient = new HttpClient();
+        var ollamaLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<OllamaService>();
+        var ollamaConfig = Options.Create(new OllamaConfig
+        {
+            BaseUrl = "http://localhost:11434",
+            EmbeddingModel = "nomic-embed-text",
+            Model = "phi3:mini",
+            TimeoutSeconds = 30
+        });
+        var ollamaService = new OllamaService(ollamaHttpClient, ollamaConfig, ollamaLogger);
+
+        var indexerService = new IndexerService(indexerConfig, chromaDbService, ollamaService, indexerLogger);
         var toolsLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<IndexFolderTools>();
         var indexFolderTools = new IndexFolderTools(toolsLogger, indexerService);
-        
+
         // Act
+        await chromaDbService.ClearAsync();
         var result = await indexFolderTools.IndexFolder(testFolder, "*.txt");
         
         // Assert
@@ -70,8 +86,12 @@ public class IndexFolderIntegrationTests
         });
         var ollamaService = new OllamaService(ollamaHttpClient, ollamaConfig, ollamaLogger);
         
+        var vectorStoreConfig = Options.Create(new VectorStoreConfig
+        {
+            ConnectionString = "http://localhost:8000"
+        });
         var ragConfig = Options.Create(new RAGConfig());
-        var chromaDbService = new ChromaDbService(httpClient, ollamaService, ragConfig, logger);
+        var chromaDbService = new ChromaDbService(httpClient, ollamaService, vectorStoreConfig, ragConfig, logger);
         
         // Создаем тестовые данные с реальными эмбеддингами
         var testChunks = new[]
@@ -118,7 +138,7 @@ public class IndexFolderIntegrationTests
             });
             Console.WriteLine($"Генерация эмбеддингов для текста: {chunk.Text.Substring(0, Math.Min(50, chunk.Text.Length))}...");
         }
-        
+
         // Act - выполняем реальные операции
         try
         {
@@ -127,7 +147,7 @@ public class IndexFolderIntegrationTests
             Console.WriteLine($"Количество документов перед добавлением: {countBefore}");
 
             // Добавление тестовых данных
-            await chromaDbService.ClearAsync();
+            //await chromaDbService.ClearAsync();
             await chromaDbService.AddDocumentsAsync(chunksWithEmbeddings);
             //Console.WriteLine("Тестовые данные успешно добавлены");
             
@@ -136,8 +156,8 @@ public class IndexFolderIntegrationTests
             //Console.WriteLine($"Количество документов после добавления: {countAfter}");
             
             // Поиск по тестовому запросу
-            var results = await chromaDbService.SearchAsync("о чем поют", 1);
-            Console.WriteLine($"Найдено {results.Count()} результатов для запроса 'искусственный интеллект'");
+            var results = await chromaDbService.SearchAsync("Собаки любят", 1);
+            Console.WriteLine($"Найдено {results.Count()} результатов для запроса 'Собаки любят'");
             
             // Assert - проверки
             //Assert.True(countAfter > countBefore, "Количество документов должно увеличиться");
@@ -178,8 +198,12 @@ public class IndexFolderIntegrationTests
         var config = Options.Create(new IndexerConfig());
         
         var httpClient = new HttpClient { BaseAddress = new System.Uri("http://localhost:8000") };
+        var vectorStoreConfig = Options.Create(new VectorStoreConfig
+        {
+            ConnectionString = "http://localhost:8000"
+        });
         var ragConfig = Options.Create(new RAGConfig());
-        var chromaDbService = new ChromaDbService(httpClient, CreateMockOllamaService().Object, ragConfig, chromaLogger);
+        var chromaDbService = new ChromaDbService(httpClient, CreateMockOllamaService().Object, vectorStoreConfig, ragConfig, chromaLogger);
         
         var indexerService = new IndexerService(config, chromaDbService, CreateMockOllamaService().Object, indexerLogger);
         var toolsLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ListFilesTool>();
@@ -208,8 +232,12 @@ public class IndexFolderIntegrationTests
         var config = Options.Create(new IndexerConfig());
         
         var httpClient = new HttpClient { BaseAddress = new System.Uri("http://localhost:8000") };
+        var vectorStoreConfig = Options.Create(new VectorStoreConfig
+        {
+            ConnectionString = "http://localhost:8000"
+        });
         var ragConfig = Options.Create(new RAGConfig());
-        var chromaDbService = new ChromaDbService(httpClient, CreateMockOllamaService().Object, ragConfig, chromaLogger);
+        var chromaDbService = new ChromaDbService(httpClient, CreateMockOllamaService().Object, vectorStoreConfig, ragConfig, chromaLogger);
         
         var indexerService = new IndexerService(config, chromaDbService, CreateMockOllamaService().Object, indexerLogger);
         var toolsLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ListFilesTool>();
@@ -251,8 +279,12 @@ public class IndexFolderIntegrationTests
         });
         var ollamaService = new OllamaService(ollamaHttpClient, ollamaConfig, ollamaLogger);
         
+        var vectorStoreConfig = Options.Create(new VectorStoreConfig
+        {
+            ConnectionString = "http://localhost:8000"
+        });
         var ragConfig = Options.Create(new RAGConfig());
-        var chromaDbService = new ChromaDbService(httpClient, ollamaService, ragConfig, logger);
+        var chromaDbService = new ChromaDbService(httpClient, ollamaService, vectorStoreConfig, ragConfig, logger);
         
         // Создаем тестовые данные с реальными эмбеддингами
         var testChunks = new[]

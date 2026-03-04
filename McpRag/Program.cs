@@ -59,15 +59,11 @@ builder.Services.AddHttpClient<IOllamaService, OllamaService>((sp, client) =>
 });
 
 // Add vector store
-builder.Services.AddHttpClient<IVectorStoreService, ChromaDbService>();
-builder.Services.AddSingleton<IVectorStoreService>(sp =>
+builder.Services.AddHttpClient<IVectorStoreService, ChromaDbService>((sp, client) =>
 {
-    var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-    var ollamaService = sp.GetRequiredService<IOllamaService>();
-    var vectorStoreConfig = sp.GetRequiredService<IOptions<VectorStoreConfig>>();
-    var ragConfig = sp.GetRequiredService<IOptions<RAGConfig>>();
-    var logger = sp.GetRequiredService<ILogger<ChromaDbService>>();
-    return new ChromaDbService(httpClient, ollamaService, vectorStoreConfig, ragConfig, logger);
+    var config = sp.GetRequiredService<IOptions<VectorStoreConfig>>().Value;
+    client.BaseAddress = new Uri(config.ConnectionString);
+    client.Timeout = TimeSpan.FromSeconds(30);
 });
 
 // Add indexer service

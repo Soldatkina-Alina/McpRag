@@ -37,11 +37,15 @@ public class ChromaDbService : IVectorStoreService
     public ChromaDbService(HttpClient httpClient, IOllamaService ollama, Microsoft.Extensions.Options.IOptions<VectorStoreConfig> vectorStoreConfig, Microsoft.Extensions.Options.IOptions<RAGConfig> config, ILogger<ChromaDbService> logger)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-        _httpClient.BaseAddress = new Uri(vectorStoreConfig?.Value?.ConnectionString ?? "http://localhost:8000");
-        _httpClient.Timeout = TimeSpan.FromSeconds(30);
         _ollama = ollama ?? throw new ArgumentNullException(nameof(ollama));
         _config = config?.Value ?? throw new ArgumentNullException(nameof(config));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+        // Verify HttpClient configuration
+        if (_httpClient.BaseAddress == null)
+        {
+            throw new ArgumentException("HttpClient BaseAddress must be configured", nameof(httpClient));
+        }
     }
 
     /// <summary>

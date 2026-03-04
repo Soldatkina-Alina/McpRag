@@ -58,6 +58,7 @@ services:
   rag-server:
     build: .
     container_name: mcprag-server
+    stdin_open: true
     ports:
       - "5000:5000"
       - "8080:8080"

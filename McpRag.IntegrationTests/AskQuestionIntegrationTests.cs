@@ -44,6 +44,10 @@ public class AskQuestionIntegrationTests
         
         // Создаем ChromaDbService
         var chromaLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ChromaDbService>();
+        var vectorStoreConfig = Options.Create(new VectorStoreConfig
+        {
+            ConnectionString = "http://localhost:8000"
+        });
         var ragConfig = Options.Create(new RAGConfig
         {
             MaxChunks = 2,
@@ -55,7 +59,7 @@ public class AskQuestionIntegrationTests
                 Enabled = false // Отключаем оценку для теста
             }
         });
-        var chromaDbService = new ChromaDbService(httpClient, ollamaService, ragConfig, chromaLogger);
+        var chromaDbService = new ChromaDbService(httpClient, ollamaService, vectorStoreConfig, ragConfig, chromaLogger);
         
         // Создаем ContextFormatter
         var contextFormatter = new ContextFormatter();
@@ -146,7 +150,11 @@ public class AskQuestionIntegrationTests
         
         // Создаем ChromaDbService
         var chromaLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ChromaDbService>();
-        var chromaDbService = new ChromaDbService(httpClient, ollamaService, ragConfig, chromaLogger);
+        var vectorStoreConfig = Options.Create(new VectorStoreConfig
+        {
+            ConnectionString = "http://localhost:8000"
+        });
+        var chromaDbService = new ChromaDbService(httpClient, ollamaService, vectorStoreConfig, ragConfig, chromaLogger);
         
         // Создаем ContextFormatter
         var contextFormatter = new ContextFormatter();
