@@ -17,7 +17,6 @@ namespace McpRag;
 /// </summary>
 public class ChromaDbService : IVectorStoreService
 {
-    private readonly string _baseUrl = "http://localhost:8000";
     private readonly string _collectionName = "documents";
     private readonly HttpClient _httpClient;
     private readonly IOllamaService _ollama;
@@ -32,12 +31,13 @@ public class ChromaDbService : IVectorStoreService
     /// </summary>
     /// <param name="httpClient">HTTP-клиент для отправки запросов к ChromaDB API.</param>
     /// <param name="ollama">Сервис для работы с Ollama (генерация эмбеддингов).</param>
+    /// <param name="vectorStoreConfig">Конфигурация для VectorStore.</param>
     /// <param name="logger">Логгер для записи информации о работе сервиса.</param>
     /// <exception cref="ArgumentNullException">Выбрасывается, если любой из параметров равен null.</exception>
-    public ChromaDbService(HttpClient httpClient, IOllamaService ollama, Microsoft.Extensions.Options.IOptions<RAGConfig> config, ILogger<ChromaDbService> logger)
+    public ChromaDbService(HttpClient httpClient, IOllamaService ollama, Microsoft.Extensions.Options.IOptions<VectorStoreConfig> vectorStoreConfig, Microsoft.Extensions.Options.IOptions<RAGConfig> config, ILogger<ChromaDbService> logger)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-        _httpClient.BaseAddress = new Uri(_baseUrl);
+        _httpClient.BaseAddress = new Uri(vectorStoreConfig?.Value?.ConnectionString ?? "http://localhost:8000");
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
         _ollama = ollama ?? throw new ArgumentNullException(nameof(ollama));
         _config = config?.Value ?? throw new ArgumentNullException(nameof(config));
