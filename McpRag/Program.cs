@@ -134,6 +134,7 @@ for (int i = 0; i < maxRetries; i++)
         await vectorStore.CountAsync(default);
         logger.LogInformation("ChromaDB service is available");
         chromaAvailable = true;
+        Thread.Sleep(1000);
         break;
     }
     catch (Exception ex)

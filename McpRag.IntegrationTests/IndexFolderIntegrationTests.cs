@@ -51,7 +51,7 @@ public class IndexFolderIntegrationTests
         var indexFolderTools = new IndexFolderTools(toolsLogger, indexerService);
 
         // Act
-        await chromaDbService.ClearAsync();
+        //await chromaDbService.ClearAsync();
         var result = await indexFolderTools.IndexFolder(testFolder, "*.txt");
         
         // Assert
