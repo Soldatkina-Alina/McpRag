@@ -44,7 +44,7 @@ public class ChromaDbService : IVectorStoreService
         // Verify HttpClient configuration
         if (_httpClient.BaseAddress == null)
         {
-            throw new ArgumentException("HttpClient BaseAddress must be configured", nameof(httpClient));
+            throw new ArgumentException($"HttpClient BaseAddress must be configured", nameof(httpClient));
         }
     }
 

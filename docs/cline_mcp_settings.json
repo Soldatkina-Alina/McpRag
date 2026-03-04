@@ -7,7 +7,8 @@
         "run",
         "--project",
         "McpRag"
-      ]
+      ],
+      "timeout": 600
     }
   }
 }
