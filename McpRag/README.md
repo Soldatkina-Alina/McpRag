@@ -3,6 +3,9 @@
 This README was created using the C# MCP server project template.
 It demonstrates how you can easily create an MCP server using C# and publish it as a NuGet package.
 
+### ВНИМАНИЕ
+Модели очень слабые. Вопросы через ask_question должны быть максимально простыми и быть частью текста. ChromeDB находит идеально, а вот LLM урезает ответ и может выдать чушь или вовсе сказать, что ответ не найден.
+
 ## Запуск в Docker
 
 Для запуска RAG сервера в Docker выполните следующие шаги:
@@ -65,6 +68,37 @@ docker-compose down
 ```bash
 docker-compose down -v
 ```
+### Для подключения к Cline
+{
+  "mcpServers": {
+    "McpRag": {
+      "autoApprove": [
+        "echo",
+        "check_ollama",
+        "list_files",
+        "ask_llm",
+        "index_folder",
+        "vector_store_status",
+        "clear_vector_store",
+        "search_docs",
+        "ask_question",
+        "index_status",
+        "find_relevant_docs",
+        "summarize_document"
+      ],
+      "disabled": false,
+      "timeout": 6000,
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "exec",
+        "-i",
+        "server",
+        "dotnet", "McpRag.dll"
+      ]
+    }
+  }
+}
 
 ### Особенности
 
