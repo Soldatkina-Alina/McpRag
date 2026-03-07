@@ -184,13 +184,15 @@ public class IndexerService : IIndexerService
     /// <param name="chunkSize">Размер каждого чанка (по умолчанию 1000 символов).</param>
     /// <param name="chunkOverlap">Перекрытие между чанками (по умолчанию 200 символов).</param>
     /// <returns>Список чанков документа.</returns>
-    private List<string> SplitDocumentIntoChunks(string text, int chunkSize = 1000, int chunkOverlap = 200)
+    private List<string> SplitDocumentIntoChunks(string text)
     {
         var chunks = new List<string>();
         int start = 0;
         int textLength = text.Length;
         int lastChunkStart = 0;
-        
+        var chunkSize = _config.ChunkSize;
+        int chunkOverlap = _config.ChunkOverlap;
+
         while (start < textLength)
         {
             int end = Math.Min(start + chunkSize, textLength);

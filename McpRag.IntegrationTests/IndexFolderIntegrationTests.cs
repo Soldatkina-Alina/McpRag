@@ -57,7 +57,53 @@ public class IndexFolderIntegrationTests
         // Assert
         Assert.False(string.IsNullOrEmpty(result));
     }
-    
+
+    /// <summary>
+    /// Проверяет базовую работу IndexFolder - на реальных сервисах
+    /// </summary>
+    [Fact]
+    public async Task IndexFolder_BasicFunctionality_RealService()
+    {
+        // Arrange
+        var testFolder = "C:\\test_docs";
+
+        var indexerLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<IndexerService>();
+        var chromaLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ChromaDbService>();
+        var indexerConfig = Options.Create(new IndexerConfig());
+        var ragConfig = Options.Create(new RAGConfig());
+
+        var httpClient = new HttpClient { BaseAddress = new System.Uri("http://localhost:8000") };
+        var vectorStoreConfig = Options.Create(new VectorStoreConfig
+        {
+            ConnectionString = "http://localhost:8000"
+        });
+        // Создаем реальный HttpClient для Ollama
+        var ollamaHttpClient = new HttpClient();
+        var ollamaLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<OllamaService>();
+        var ollamaConfig = Options.Create(new OllamaConfig
+        {
+            BaseUrl = "http://localhost:11434",
+            EmbeddingModel = "nomic-embed-text",
+            Model = "phi3:mini",
+            TimeoutSeconds = 30
+        });
+        var ollamaService = new OllamaService(ollamaHttpClient, ollamaConfig, ollamaLogger);
+
+        var chromaDbService = new ChromaDbService(httpClient, ollamaService, vectorStoreConfig, ragConfig, chromaLogger);
+        // Создаем реальный HttpClient для Ollama
+
+        var indexerService = new IndexerService(indexerConfig, chromaDbService, ollamaService, indexerLogger);
+        var toolsLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<IndexFolderTools>();
+        var indexFolderTools = new IndexFolderTools(toolsLogger, indexerService);
+
+        // Act
+        await chromaDbService.ClearAsync();
+        var result = await indexFolderTools.IndexFolder(testFolder, "*.txt");
+
+        // Assert
+        Assert.False(string.IsNullOrEmpty(result));
+    }
+
     /// <summary>
     /// Проверяет работу ChromaDbService с реальными серверами (ChromaDB и Ollama).
     /// </summary>

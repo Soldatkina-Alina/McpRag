@@ -129,7 +129,7 @@ namespace McpRag
         /// <summary>
         /// Включить или отключить оценку документов через LLM.
         /// </summary>
-        public bool Enabled { get; set; } = true;
+        public bool Enabled { get; set; } = false;
 
         /// <summary>
         /// Порог Score от ChromaDB для пропуска оценки LLM.

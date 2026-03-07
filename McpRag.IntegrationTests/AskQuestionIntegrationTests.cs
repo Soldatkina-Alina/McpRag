@@ -108,6 +108,82 @@ public class AskQuestionIntegrationTests
     }
 
     /// <summary>
+    /// Проверяет, что AskQuestionTool выдает результат для вопроса с существующей информацией в документах.
+    /// </summary>
+    [Fact]
+    public async Task AskQuestion_ShouldReturnResult_WhenInformationExistsForEnglish()
+    {
+        var testFolder = "C:\\test_docs";
+
+        var logger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<AskQuestionTool>();
+        var chromaLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ChromaDbService>();
+        var ragConfig = Options.Create(new RAGConfig());
+
+        var httpClient = new HttpClient { BaseAddress = new System.Uri("http://localhost:8000") };
+        var vectorStoreConfig = Options.Create(new VectorStoreConfig
+        {
+            ConnectionString = "http://localhost:8000"
+        });
+
+        // Создаем реальный HttpClient для Ollama
+        var ollamaHttpClient = new HttpClient();
+        var ollamaLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<OllamaService>();
+        var ollamaConfig = Options.Create(new OllamaConfig
+        {
+            BaseUrl = "http://localhost:11434",
+            EmbeddingModel = "nomic-embed-text",
+            Model = "qwen2.5:7b",
+            TimeoutSeconds = 300
+        });
+        var ollamaService = new OllamaService(ollamaHttpClient, ollamaConfig, ollamaLogger);
+        var chromaDbService = new ChromaDbService(httpClient, ollamaService, vectorStoreConfig, ragConfig, chromaLogger);
+ 
+
+        // Act
+        //await chromaDbService.ClearAsync();
+
+        // Создаем ContextFormatter
+        var contextFormatter = new ContextFormatter();
+
+        // Создаем RagGraphService
+        var ragLogger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<RagGraphService>();
+        var ragGraphService = new RagGraphService(
+            chromaDbService,
+            ollamaService,
+            ragConfig,
+            contextFormatter,
+            ragLogger);
+
+        // Создаем AskQuestionTool
+        var askQuestionTool = new AskQuestionTool(ragGraphService, ragConfig, logger);
+
+        // Act
+        try
+        {
+            // Вопрос с существующей информацией в docs/test_docs/
+            var question = "Кто обидает в замке?";
+            var result = await askQuestionTool.AskQuestion(question);
+
+            // Assert
+            Assert.DoesNotContain("не найдено информации", result);
+            Assert.DoesNotContain("❌", result);
+
+            Console.WriteLine("Тест пройден успешно! Ответ содержит ожидаемую информацию.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Ошибка при тестировании AskQuestionTool: {ex.Message}");
+            if (ex.InnerException != null)
+            {
+                Console.WriteLine($"Внутренняя ошибка: {ex.InnerException.Message}");
+            }
+            Console.WriteLine($"Стек вызовов: {ex.StackTrace}");
+
+            Assert.Fail($"Тест провален: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// Проверяет, что AskQuestionTool выдает отрицательный результат для вопроса без информации в документах.
     /// </summary>
     [Fact]

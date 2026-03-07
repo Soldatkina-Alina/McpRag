@@ -11,4 +11,6 @@ public class IndexerConfig
         new List<string> { ".txt", ".md", ".cs", ".js", ".ts", ".json", ".yaml", ".rst" };
     public int MaxFileSizeMB { get; set; } = 10;
     public bool SkipLockedFiles { get; set; } = true;
+    public int ChunkSize { get; set; } = 400;
+    public int ChunkOverlap { get; set; } = 200;
 }

@@ -56,6 +56,7 @@ public class RagGraphService : IRagGraphService
     /// <returns>Состояние графа RAG с результатами обработки.</returns>
     public async Task<RagState> ExecuteAsync(string question, CancellationToken ct)
     {
+
         // Инициализация состояния графа с базовыми параметрами
         var state = new RagState(_config) 
         { 
@@ -63,7 +64,7 @@ public class RagGraphService : IRagGraphService
             CurrentQuery = question,
             CurrentScoreThreshold = _config.Value.MinRelevanceScore
         };
-        
+
         try
         {
             // Шаг 1: Улучшение запроса перед первым поиском (опционально)
@@ -77,8 +78,8 @@ public class RagGraphService : IRagGraphService
             {
                 // Шаг 2: Поиск документов в векторном хранилище по текущему запросу
                 state = await SearchNodeAsync(state, ct);
-               
-                // Шаг 3: Оценка релевантности найденных документов через LLM
+
+                // Шаг 3: Оценка релевантности найденных документов через LLM (отключена из-за слабой модели)
                 state = await GradeDocumentsNodeAsync(state, ct);
 
                 // Шаг 4: Проверка: достаточно ли документов имеют высокую релевантность?
@@ -90,36 +91,35 @@ public class RagGraphService : IRagGraphService
                 }
                 
                 // Оптимизация: быстрый выход при полном отсутствии документов
-                if (state.Documents.Count == 0)
-                {
-                    _logger.LogWarning("Нет документов для оценки, расширяем запрос");
-                    if (state.RetryCount < _config.Value.Retry.MaxRetries)
-                    {
-                        state = await BroadenQueryNodeAsync(state, ct);
-                        continue; // Переходим к следующей итерации
-                    }
-                    else
-                    {
-                        // Достигнут лимит попыток без документов
-                        break;
-                    }
-                }
+                //if (state.Documents.Count == 0)
+                //{
+                //    _logger.LogWarning("Нет документов для оценки, расширяем запрос");
+                //    if (state.RetryCount < _config.Value.Retry.MaxRetries)
+                //    {
+                //        state = await BroadenQueryNodeAsync(state, ct);
+                //        continue; // Переходим к следующей итерации
+                //    }
+                //    else
+                //    {
+                //        // Достигнут лимит попыток без документов
+                //        break;
+                //    }
+                //}
                 
                 // Оптимизация: умное расширение запроса
-                if (state.RetryCount < _config.Value.Retry.MaxRetries)
+                if (state.RetryCount <= _config.Value.Retry.MaxRetries)
                 {
                     // Проверяем, есть ли хоть какие-то документы для оценки
                     var hasAnyDocuments = state.Documents.Any();
                     
-                    if (!hasAnyDocuments)
+                    if (!hasAnyDocuments && state.RetryCount == _config.Value.Retry.MaxRetries)
                     {
                         // Если документов нет вообще - расширяем запрос
                         state = await BroadenQueryNodeAsync(state, ct);
                     }
                     else
                     {
-                        // Если документы есть, но не релевантны - можно попробовать улучшить запрос
-                        // или изменить порог релевантности
+                        // уменьшаем порог релевантности
                         state.CurrentScoreThreshold *= 0.9f; // Снижаем порог на 10%
                         state.RetryCount++;
                         _logger.LogInformation("Снижаем порог релевантности до {Threshold}", state.CurrentScoreThreshold);
@@ -277,17 +277,15 @@ public class RagGraphService : IRagGraphService
         {
             var prompt = $@"
 Ты - эксперт по расширению поисковых запросов.
-Текущий запрос: {state.CurrentQuery}
-
-Найдено недостаточно релевантных документов.
-Расширь запрос, чтобы найти больше информации:
-- Добавь синонимы
+Возьми запрос: {state.CurrentQuery}
+Измени его, но оставь суть:
+- Используй синонимы
 - Используй более общие термины
 - Включи связанные понятия
 
-Ответь ТОЛЬКО расширенным запросом, без пояснений.
+Верни ТОЛЬКО один короткий запрос, без пояснений. Используй тот же язык, на котором запрос.
 
-Расширенный запрос:";
+Запрос:";
             
             var broadened = await _ollama.GenerateAsync(prompt, ct);
             state.CurrentQuery = broadened.Trim();
@@ -328,7 +326,7 @@ public class RagGraphService : IRagGraphService
         // Используем динамический порог и счетчик релевантных
         var relevantCount = state.Documents.Count(d => 
             d.IsRelevant && d.Score >= state.CurrentScoreThreshold);
-        
+       
         return relevantCount >= config.MinRelevantCount;
     }
 
@@ -807,9 +805,7 @@ public class RagGraphService : IRagGraphService
         
         try
         {
-            var relevantChunks = state.Documents
-                .Where(d => d.Score >= _config.Value.MinRelevanceScore)
-                .ToList();
+            var relevantChunks = state.Documents;
             
             var context = _contextFormatter.FormatContext(
                 relevantChunks, 
@@ -823,19 +819,14 @@ public class RagGraphService : IRagGraphService
             }
             
             var prompt = $@"
-Ты - ассистент, который отвечает на вопросы, используя ТОЛЬКО информацию из предоставленного контекста.
-
-ВАЖНЫЕ ПРАВИЛА:
-1. Отвечай строго на основе контекста, не используй свои знания
-2. Если в контексте нет ответа - скажи, что информации нет
-3. Ссылайся на источники в формате [Источник N]
-4. Не придумывай факты и не дополняй информацию
-5. Если информация неполная - так и скажи
-
-Контекст (документы):
+Прочти документы:
 {context}
 
-Вопрос пользователя: {state.Question}
+Ответь на вопрос пользователя: {state.Question}
+
+Ищи аналогичные слова в тексте.
+Если ответа нет, скажи.
+Не выдумывай.
 
 Ответ (только на основе контекста, с указанием источников):";
             
