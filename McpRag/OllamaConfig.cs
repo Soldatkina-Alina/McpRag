@@ -8,7 +8,7 @@ public class OllamaConfig
     public string BaseUrl { get; set; } = "http://localhost:11434";
     public string Model { get; set; } = "phi3:mini";
     public string EmbeddingModel { get; set; } = "nomic-embed-text";
-    public int TimeoutSeconds { get; set; } = 30;
+    public int TimeoutSeconds { get; set; } = 600; // Увеличим до 10 минут
     public double Temperature { get; set; } = 0.7;
     public int MaxTokens { get; set; } = 500;
 }

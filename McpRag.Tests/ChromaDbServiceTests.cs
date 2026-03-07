@@ -31,7 +31,12 @@ public class ChromaDbServiceTests
             BaseAddress = new System.Uri("http://localhost:8000")
         };
         var logger = LoggerFactory.Create(x => x.AddConsole()).CreateLogger<ChromaDbService>();
-        _chromaDbService = new ChromaDbService(_httpClient, _ollamaMock.Object, logger);
+        var vectorStoreConfig = Microsoft.Extensions.Options.Options.Create(new VectorStoreConfig
+        {
+            ConnectionString = "http://localhost:8000"
+        });
+        var config = Microsoft.Extensions.Options.Options.Create(new RAGConfig());
+        _chromaDbService = new ChromaDbService(_httpClient, _ollamaMock.Object, vectorStoreConfig, config, logger);
     }
 
     /// <summary>

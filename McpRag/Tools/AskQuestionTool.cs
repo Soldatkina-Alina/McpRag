@@ -86,6 +86,35 @@ namespace McpRag.Tools
                     }
                 }
                 
+                if (state.QueryHistory.Any())
+                {
+                    result.AppendLine();
+                    result.AppendLine("📝 **История запросов:**");
+                    for (int i = 0; i < state.QueryHistory.Count; i++)
+                    {
+                        result.AppendLine($"  {i + 1}. {state.QueryHistory[i]}");
+                    }
+                }
+                
+                if (state.RegenerationCount > 0)
+                {
+                    result.AppendLine($"🔄 **Регенераций:** {state.RegenerationCount}");
+                }
+                
+                if (state.GroundingScore.HasValue)
+                {
+                    result.AppendLine($"🎯 **Уверенность в фактах:** {state.GroundingScore:P1}");
+                }
+                
+                if (state.AnswerHistory.Any())
+                {
+                    result.AppendLine("📜 **История ответов:**");
+                    for (int i = 0; i < state.AnswerHistory.Count; i++)
+                    {
+                        result.AppendLine($"  {i + 1}. {state.AnswerHistory[i].Substring(0, Math.Min(100, state.AnswerHistory[i].Length))}...");
+                    }
+                }
+                
                 if (state.Documents.Any())
                 {
                     var sources = state.Documents

@@ -53,7 +53,7 @@ public class SearchDocsToolTests
         };
 
         _vectorStoreMock.Setup(x => x.CountAsync(It.IsAny<CancellationToken>())).ReturnsAsync(2);
-        _vectorStoreMock.Setup(x => x.SearchAsync(query, topK, It.IsAny<CancellationToken>()))
+        _vectorStoreMock.Setup(x => x.SearchAsync(query, topK * 2, It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedChunks);
 
         // Act
@@ -76,7 +76,7 @@ public class SearchDocsToolTests
         var query = "nonexistent topic";
         var topK = 5;
         _vectorStoreMock.Setup(x => x.CountAsync(It.IsAny<CancellationToken>())).ReturnsAsync(2);
-        _vectorStoreMock.Setup(x => x.SearchAsync(query, topK, It.IsAny<CancellationToken>()))
+        _vectorStoreMock.Setup(x => x.SearchAsync(query, topK * 2, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<DocumentChunk>());
 
         // Act
@@ -97,7 +97,7 @@ public class SearchDocsToolTests
         var query = string.Empty;
         var topK = 5;
         _vectorStoreMock.Setup(x => x.CountAsync(It.IsAny<CancellationToken>())).ReturnsAsync(2);
-        _vectorStoreMock.Setup(x => x.SearchAsync(query, topK, It.IsAny<CancellationToken>()))
+        _vectorStoreMock.Setup(x => x.SearchAsync(query, topK * 2, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<DocumentChunk>());
 
         // Act & Assert
@@ -128,7 +128,7 @@ public class SearchDocsToolTests
         };
 
         _vectorStoreMock.Setup(x => x.CountAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
-        _vectorStoreMock.Setup(x => x.SearchAsync(query, 5, It.IsAny<CancellationToken>()))
+        _vectorStoreMock.Setup(x => x.SearchAsync(query, 5 * 2, It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedChunks);
 
         // Act
@@ -161,7 +161,7 @@ public class SearchDocsToolTests
         };
 
         _vectorStoreMock.Setup(x => x.CountAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
-        _vectorStoreMock.Setup(x => x.SearchAsync(query, 5, It.IsAny<CancellationToken>()))
+        _vectorStoreMock.Setup(x => x.SearchAsync(query, 5 * 2, It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedChunks);
 
         // Act

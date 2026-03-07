@@ -3,6 +3,78 @@
 This README was created using the C# MCP server project template.
 It demonstrates how you can easily create an MCP server using C# and publish it as a NuGet package.
 
+## Запуск в Docker
+
+Для запуска RAG сервера в Docker выполните следующие шаги:
+
+### Требования
+- Docker и Docker Compose
+- Docker Desktop (для Windows/macOS)
+
+### Быстрый запуск
+
+1. **Склонируйте репозиторий:**
+   ```bash
+   git clone https://github.com/Soldatkina-Alina/McpRag.git
+   cd McpRag
+   ```
+
+2. **Запустите контейнеры:**
+   ```bash
+   docker-compose up --build -d
+   ```
+
+3. **Проверьте состояние контейнеров:**
+   ```bash
+   docker-compose ps
+   ```
+
+### Что запускается
+
+- **Ollama** (порт 11434): Сервис для работы с LLM моделями
+- **ChromaDB** (порт 8000): Векторная база данных для хранения эмбеддингов
+- **RAG Server** (порт 5000): Основной сервер приложения
+
+### Проверка работоспособности
+
+1. **Проверьте доступность сервисов:**
+   ```bash
+   # Проверка Ollama
+   curl http://localhost:11434/api/tags
+   
+   # Проверка ChromaDB
+   curl http://localhost:8000/api/v1/heartbeat
+   
+   # Проверка RAG сервера
+   curl http://localhost:5000/health
+   ```
+
+2. **Проверка логов:**
+   ```bash
+   docker-compose logs rag-server
+   ```
+
+### Остановка сервисов
+
+```bash
+docker-compose down
+```
+
+### Полная очистка
+
+```bash
+docker-compose down -v
+```
+
+### Особенности
+
+- Модели Ollama автоматически загружаются при первом запуске
+- Данные сохраняются в Docker volumes
+- Сервер доступен по адресу `http://localhost:5000`
+- Логи приложения сохраняются в volume `server_logs`
+
+## Project Overview
+
 The MCP server is built as a self-contained application and does not require the .NET runtime to be installed on the target machine.
 However, since it is self-contained, it must be built for each target platform separately.
 By default, the template is configured to build for:

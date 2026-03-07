@@ -5,7 +5,7 @@
         var collection = collections.FirstOrDefault(c => c.Name == "documents");
 
  Узнать количество коллекций по Id:
- curl http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections/f61f1352-2d93-46a7-b347-a7b1b51815e0/count       
+ curl http://localhost:8000/api/v2/tenants/default_tenant/databases/default_database/collections/29c342ef-8b1e-49b8-90ab-b4dababce32f/count       
 
  Как найти коллекцию:
  1. Вытянуть все коллекции

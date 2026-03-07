@@ -1,0 +1,90 @@
+services:
+  # Ollama service for LLM and embeddings
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mcprag-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+    #   interval: 60s
+    #   timeout: 30s
+    #   retries: 5
+    #   start_period: 120s
+    restart: unless-stopped
+    networks:
+      - mcprag-network
+
+  # ChromaDB for vector storage
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: mcprag-chromadb
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+    #   interval: 60s
+    #   timeout: 30s
+    #   retries: 5
+    #   start_period: 120s
+    restart: unless-stopped
+    networks:
+      - mcprag-network
+
+  # Initialize Ollama models
+  init-ollama:
+    image: curlimages/curl:latest
+    container_name: mcprag-init-ollama
+    depends_on:
+      ollama:
+        condition: service_started
+    volumes:
+      - ./init-ollama.sh:/init-ollama.sh:ro
+    command: ["sh", "/init-ollama.sh"]
+    networks:
+      - mcprag-network
+    restart: "no"
+
+  # RAG server (our MCP server)
+  rag-server:
+    build: .
+    container_name: mcprag-server
+    stdin_open: true
+    ports:
+      - "5000:5000"
+      - "8080:8080"
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - CHROMADB_HOST=http://chromadb:8000
+      - DOTNET_ENVIRONMENT=Production
+    volumes:
+      - server_logs:/app/logs
+      - ./test_docs:/app/test_docs
+    depends_on:
+      - ollama
+      - chromadb
+      - init-ollama
+    restart: unless-stopped
+    networks:
+      - mcprag-network
+
+volumes:
+  ollama_data:
+    driver: local
+  chroma_data:
+    driver: local
+  server_logs:
+    driver: local
+
+networks:
+  mcprag-network:
+    driver: bridge

@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 namespace McpRag;
 
@@ -42,70 +43,171 @@ public class RagGraphService : IRagGraphService
     }
 
     /// <summary>
-    /// Выполняет график RAG.
+    /// Основной метод выполнения графа RAG (Retrieval-Augmented Generation).
+    /// Реализует полный цикл обработки вопроса:
+    /// 1. Улучшение запроса
+    /// 2. Поиск документов в векторном хранилище с поддержкой retry-механизма
+    /// 3. Оценка релевантности документов через LLM
+    /// 4. Генерация ответа на основе контекста
+    /// 5. Проверка на галлюцинации и регенерация ответа при необходимости
     /// </summary>
-    /// <param name="question">Вопрос пользователя.</param>
-    /// <param name="ct">Токен отмены.</param>
-    /// <returns>Состояние графа RAG.</returns>
+    /// <param name="question">Вопрос пользователя для обработки.</param>
+    /// <param name="ct">Токен отмены для прерывания операции.</param>
+    /// <returns>Состояние графа RAG с результатами обработки.</returns>
     public async Task<RagState> ExecuteAsync(string question, CancellationToken ct)
     {
-        var state = new RagState(_config) { Question = question };
-        
+
+        // Инициализация состояния графа с базовыми параметрами
+        var state = new RagState(_config) 
+        { 
+            Question = question,
+            CurrentQuery = question,
+            CurrentScoreThreshold = _config.Value.MinRelevanceScore
+        };
+
         try
         {
-            // Узел 1: Поиск документов
-            state = await SearchNodeAsync(state, ct);
-            
-            // Проверка релевантности - установим все документы как релевантные для тестов
-            foreach (var doc in state.Documents)
+            // Шаг 1: Улучшение запроса перед первым поиском (опционально)
+            if (_config.Value.Retry.EnableQueryRewrite)
             {
-                doc.Score = 0.9f;
-                doc.IsRelevant = true;
+                state = await RewriteQueryNodeAsync(state, ct);
             }
             
-            // Пропускаем проверку порога релевантности для тестов
-            if (!state.HasRelevantDocuments || state.Documents.Count == 0)
+            // Начало retry-цикла для поиска достаточного количества релевантных документов
+            while (state.RetryCount <= _config.Value.Retry.MaxRetries)
             {
-                var maxScore = state.Documents.FirstOrDefault()?.Score ?? 0;
-                state.Answer = $"❌ В предоставленных документах не найдено информации.\n" +
-                               $"Наиболее похожие документы имеют релевантность {maxScore:P1}, " +
-                               $"что ниже порога {_config.Value.MinRelevanceScore:P1}.";
-                
-                state.ExecutionSteps.Add(new ExecutionStep 
-                { 
-                    NodeName = "NoRelevantDocs",
-                    Metadata = new Dictionary<string, object>
-                    {
-                        ["max_score"] = maxScore,
-                        ["threshold"] = _config.Value.MinRelevanceScore,
-                        ["total_chunks"] = state.Documents.Count
-                    }
-                });
-                return state;
-            }
+                // Шаг 2: Поиск документов в векторном хранилище по текущему запросу
+                state = await SearchNodeAsync(state, ct);
 
-            // Узел 2: Оценка релевантности через LLM
-            if (state.Documents.Any())
-            {
+                // Шаг 3: Оценка релевантности найденных документов через LLM (отключена из-за слабой модели)
                 state = await GradeDocumentsNodeAsync(state, ct);
-                
-                if (!state.HasRelevantDocuments)
+
+                // Шаг 4: Проверка: достаточно ли документов имеют высокую релевантность?
+                if (HasEnoughRelevantDocuments(state))
                 {
-                    state.Answer = $"❌ После оценки релевантности не найдено подходящих документов.\n" +
-                                   $"Порог ChromaDB: {_config.Value.MinRelevanceScore:P1}, " +
-                                   $"порог LLM: {_config.Value.GradeDocuments.LLMThreshold:P1}";
-                    return state;
+                    _logger.LogInformation("Найдено достаточное количество релевантных документов ({Count})", 
+                        state.Documents.Count(d => d.IsRelevant && d.Score >= state.CurrentScoreThreshold));
+                    break; // Достаточно документов - выходим из цикла поиска
+                }
+                
+                // Оптимизация: быстрый выход при полном отсутствии документов
+                //if (state.Documents.Count == 0)
+                //{
+                //    _logger.LogWarning("Нет документов для оценки, расширяем запрос");
+                //    if (state.RetryCount < _config.Value.Retry.MaxRetries)
+                //    {
+                //        state = await BroadenQueryNodeAsync(state, ct);
+                //        continue; // Переходим к следующей итерации
+                //    }
+                //    else
+                //    {
+                //        // Достигнут лимит попыток без документов
+                //        break;
+                //    }
+                //}
+                
+                // Оптимизация: умное расширение запроса
+                if (state.RetryCount <= _config.Value.Retry.MaxRetries)
+                {
+                    // Проверяем, есть ли хоть какие-то документы для оценки
+                    var hasAnyDocuments = state.Documents.Any();
+                    
+                    if (!hasAnyDocuments && state.RetryCount == _config.Value.Retry.MaxRetries)
+                    {
+                        // Если документов нет вообще - расширяем запрос
+                        state = await BroadenQueryNodeAsync(state, ct);
+                    }
+                    else
+                    {
+                        // уменьшаем порог релевантности
+                        state.CurrentScoreThreshold *= 0.9f; // Снижаем порог на 10%
+                        state.RetryCount++;
+                        _logger.LogInformation("Снижаем порог релевантности до {Threshold}", state.CurrentScoreThreshold);
+                    }
+                }
+                else
+                {
+                    // Достигнут лимит попыток - логируем и завершаем цикл
+                    state.ExecutionSteps.Add(new ExecutionStep 
+                    { 
+                        NodeName = "MaxRetriesReached",
+                        Metadata = new Dictionary<string, object>
+                        {
+                            ["max_retries"] = _config.Value.Retry.MaxRetries,
+                            ["relevant_found"] = state.Documents.Count(d => d.IsRelevant)
+                        }
+                    });
+                    _logger.LogWarning("Достигнут лимит попыток поиска ({MaxRetries}), найдено {Count} релевантных документов", 
+                        _config.Value.Retry.MaxRetries, state.Documents.Count(d => d.IsRelevant));
+                    break;
                 }
             }
             
-            // Узел 3: Генерация ответа
-            state = await GenerateNodeAsync(state, ct);
+            // Если после всех попыток не найдено ни одного релевантного документа
+            if (!state.Documents.Any(d => d.IsRelevant && d.Score >= state.CurrentScoreThreshold))
+            {
+                state.Answer = $"❌ После {state.RetryCount + 1} попыток не найдено релевантных документов.\n" +
+                               $"Последний запрос: '{state.CurrentQuery}'\n" +
+                               $"История запросов: {string.Join(" → ", state.QueryHistory)}";
+                _logger.LogWarning("Не найдено релевантных документов для вопроса: {Question}", question);
+                return state;
+            }
             
+            // Шаг 6: Генерация ответа на основе релевантных документов
+            if (_config.Value.EnableAnswerGeneration)
+            {
+                state = await GenerateNodeAsync(state, ct);
+            }
+            else
+            {
+                // Если генерация отключена, формируем ответ из найденных документов
+                state.Answer = "Найденные документы:\n" + 
+                              string.Join("\n\n", state.Documents
+                                  .Where(d => d.IsRelevant)
+                                  .Select((d, i) => $"{i + 1}. {d.Text}"));
+                state.IsGrounded = true; // Ответ основан на документах
+                state.GroundingScore = 1.0f; // Максимальная уверенность
+            }
+            
+            // Шаг 7: Проверка ответа на галлюцинации (информацию, не найденную в контексте)
+            if (_config.Value.EnableHallucinationCheck && !string.IsNullOrEmpty(state.Answer))
+            {
+                state = await HallucinationCheckNodeAsync(state, ct);
+            }
+            else
+            {
+                // Если проверка отключена, считаем ответ grounded
+                state.IsGrounded = true;
+                state.GroundingScore = 1.0f;
+            }
+
+            // Шаг 8: Если ответ не соответствует контексту и есть попытки регенерации - повторяем генерацию
+            if (_config.Value.EnableRegeneration && 
+                !state.IsGrounded && 
+                state.RegenerationCount < _config.Value.Hallucination.MaxRegenerations)
+            {
+                state = await RegenerateNodeAsync(state, ct);
+                
+                // Проверяем снова на галлюцинации
+                if (_config.Value.EnableHallucinationCheck)
+                {
+                    state = await HallucinationCheckNodeAsync(state, ct);
+                }
+            }
+            
+            // Если после регенерации ответ все еще не соответствует контексту - добавляем предупреждение
+            if (!state.IsGrounded)
+            {
+                state.Answer += "\n\n⚠️ **Предупреждение**: Ответ может содержать элементы, не найденные в документов.";
+                _logger.LogWarning("Ответ содержит галлюцинации для вопроса: {Question}", question);
+            }
+            
+            _logger.LogInformation("Обработка вопроса завершена успешно");
             return state;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Ошибка при выполнении графа RAG");
+            _logger.LogError(ex, "Ошибка при выполнении графа RAG для вопроса: {Question}", question);
             state.HasError = true;
             state.ErrorMessage = ex.Message;
             state.ExecutionSteps.Add(new ExecutionStep 
@@ -115,6 +217,117 @@ public class RagGraphService : IRagGraphService
             });
             return state;
         }
+    }
+
+    /// <summary>
+    /// Узел графа для перезаписи запроса.
+    /// </summary>
+    /// <param name="state">Состояние графа.</param>
+    /// <param name="ct">Токен отмены.</param>
+    /// <returns>Обновленное состояние графа.</returns>
+    private async Task<RagState> RewriteQueryNodeAsync(RagState state, CancellationToken ct)
+    {
+        var step = new ExecutionStep { NodeName = "RewriteQuery" };
+        
+        try
+        {
+            var prompt = $@"
+Ты - эксперт по улучшению поисковых запросов для RAG системы.
+Исходный запрос пользователя: {state.Question}
+
+Твоя задача: перепиши запрос так, чтобы он лучше подходил для поиска релевантных документов.
+- Используй более точные термины
+- Добавь важные ключевые слова
+- Сохрани исходный смысл
+- Ответь ТОЛЬКО улучшенным запросом, без пояснений
+
+Улучшенный запрос:";
+            
+            var rewritten = await _ollama.GenerateAsync(prompt, ct);
+            state.CurrentQuery = rewritten.Trim();
+            state.QueryHistory.Add(rewritten.Trim());
+            
+            step.Metadata["original"] = state.Question;
+            step.Metadata["rewritten"] = state.CurrentQuery;
+        }
+        catch (Exception ex)
+        {
+            step.Metadata["error"] = ex.Message;
+            state.CurrentQuery = state.Question; // fallback к исходному
+        }
+        finally
+        {
+            state.ExecutionSteps.Add(step);
+        }
+        
+        return state;
+    }
+
+    /// <summary>
+    /// Узел графа для расширения запроса.
+    /// </summary>
+    /// <param name="state">Состояние графа.</param>
+    /// <param name="ct">Токен отмены.</param>
+    /// <returns>Обновленное состояние графа.</returns>
+    private async Task<RagState> BroadenQueryNodeAsync(RagState state, CancellationToken ct)
+    {
+        var step = new ExecutionStep { NodeName = "BroadenQuery" };
+        
+        try
+        {
+            var prompt = $@"
+Ты - эксперт по расширению поисковых запросов.
+Возьми запрос: {state.CurrentQuery}
+Измени его, но оставь суть:
+- Используй синонимы
+- Используй более общие термины
+- Включи связанные понятия
+
+Верни ТОЛЬКО один короткий запрос, без пояснений. Используй тот же язык, на котором запрос.
+
+Запрос:";
+            
+            var broadened = await _ollama.GenerateAsync(prompt, ct);
+            state.CurrentQuery = broadened.Trim();
+            state.QueryHistory.Add(broadened.Trim());
+            state.RetryCount++;
+            
+            // Динамически снижаем порог релевантности при каждой попытке
+            state.CurrentScoreThreshold = _config.Value.MinRelevanceScore * 
+                                         (1 - _config.Value.Retry.ScoreBoostPerRetry * state.RetryCount);
+            
+            step.Metadata["previous_query"] = state.QueryHistory[^2];
+            step.Metadata["broadened_query"] = state.CurrentQuery;
+            step.Metadata["retry_count"] = state.RetryCount;
+            step.Metadata["new_threshold"] = state.CurrentScoreThreshold;
+        }
+        catch (Exception ex)
+        {
+            step.Metadata["error"] = ex.Message;
+            // при ошибке оставляем тот же запрос
+        }
+        finally
+        {
+            state.ExecutionSteps.Add(step);
+        }
+        
+        return state;
+    }
+
+    /// <summary>
+    /// Проверяет, достаточно ли релевантных документов.
+    /// </summary>
+    /// <param name="state">Состояние графа.</param>
+    /// <returns>True, если количество релевантных документов достаточно.</returns>
+    private bool HasEnoughRelevantDocuments(RagState state)
+    {
+        var config = _config.Value.Retry;
+
+        // Используем динамический порог и счетчик релевантных
+        var relevantCount = state.Documents.Count(d => 
+            d.IsRelevant && d.Score >= state.CurrentScoreThreshold);
+       
+        return relevantCount >= config.MinRelevantCount;
     }
 
     /// <summary>
@@ -130,7 +343,7 @@ public class RagGraphService : IRagGraphService
         try
         {
             var results = await _vectorStore.SearchWithScoreAsync(
-                state.Question, 
+                state.CurrentQuery ?? state.Question, 
                 _config.Value.MaxChunks, 
                 ct);
             
@@ -140,9 +353,9 @@ public class RagGraphService : IRagGraphService
                 return r.Chunk;
             }).ToList();
             
+            step.Metadata["query_used"] = state.CurrentQuery;
             step.Metadata["chunks_found"] = state.Documents.Count;
-            step.Metadata["max_score"] = state.Documents.FirstOrDefault()?.Score ?? 0;
-            step.Metadata["threshold"] = _config.Value.MinRelevanceScore;
+            step.Metadata["retry_count"] = state.RetryCount;
         }
         catch (Exception ex)
         {
@@ -253,7 +466,8 @@ public class RagGraphService : IRagGraphService
     }
 
     /// <summary>
-    /// Последовательная оценка документов.
+    /// Параллельная оценка документов.
+    /// Оценивает документы одновременно, используя оптимальное количество потоков.
     /// </summary>
     /// <param name="docs">Список документов для оценки.</param>
     /// <param name="question">Вопрос пользователя.</param>
@@ -265,21 +479,29 @@ public class RagGraphService : IRagGraphService
         GradeDocumentsConfig config,
         CancellationToken ct)
     {
-        foreach (var doc in docs)
-        {
-            try
+        // Используем Parallel.ForEachAsync для параллельной обработки
+        await Parallel.ForEachAsync(
+            docs,
+            new ParallelOptions 
+            { 
+                CancellationToken = ct,
+                MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, 5) // Ограничиваем количество параллельных запросов
+            },
+            async (doc, token) =>
             {
-                doc.LLMScore = await GradeSingleDocumentAsync(doc, question, config, ct);
-                doc.IsRelevant = doc.LLMScore >= config.LLMThreshold;
-            }
-            catch (Exception ex)
-            {
-                doc.GradeError = ex.Message;
-                doc.LLMScore = null;
-                doc.IsRelevant = true; // сохраняем при ошибке
-                _logger.LogWarning(ex, "Failed to grade document {docId}", doc.Id);
-            }
-        }
+                try
+                {
+                    doc.LLMScore = await GradeSingleDocumentAsync(doc, question, config, token);
+                    doc.IsRelevant = doc.LLMScore >= config.LLMThreshold;
+                }
+                catch (Exception ex)
+                {
+                    doc.GradeError = ex.Message;
+                    doc.LLMScore = null;
+                    doc.IsRelevant = true; // сохраняем при ошибке
+                    _logger.LogWarning(ex, "Failed to grade document {docId}", doc.Id);
+                }
+            });
     }
 
     /// <summary>
@@ -399,6 +621,179 @@ public class RagGraphService : IRagGraphService
     }
 
     /// <summary>
+    /// Узел графа для проверки на галлюцинации.
+    /// </summary>
+    /// <param name="state">Состояние графа.</param>
+    /// <param name="ct">Токен отмены.</param>
+    /// <returns>Обновленное состояние графа.</returns>
+    private async Task<RagState> HallucinationCheckNodeAsync(RagState state, CancellationToken ct)
+    {
+        var step = new ExecutionStep { NodeName = "HallucinationCheck" };
+        var config = _config.Value.Hallucination;
+        
+        if (!config.Enabled || string.IsNullOrEmpty(state.Answer))
+        {
+            step.Metadata["skipped"] = true;
+            state.ExecutionSteps.Add(step);
+            return state;
+        }
+        
+        try
+        {
+            // Формируем контекст из релевантных документов
+            var context = string.Join("\n\n", state.Documents
+                .Where(d => d.IsRelevant)
+                .Select(d => d.Text));
+            
+            // Промпт для проверки
+            var prompt = $@"
+Ты - эксперт по проверке фактов в RAG системах.
+Проверь, основан ли ответ только на предоставленном контексте.
+
+Контекст (документы):
+{context}
+
+Ответ системы:
+{state.Answer}
+
+Вопрос пользователя: {state.Question}
+
+Инструкция: Оцени, содержит ли ответ информацию, которой нет в контексте.
+Ответь в формате JSON:
+{{
+  ""is_grounded"": true/false,  // true если ответ полностью основан на контексте
+  ""confidence"": 0.0-1.0,      // насколько ты уверен в оценке
+  ""hallucinated_parts"": [      // если есть выдумки, укажи их
+    ""фраза 1"",
+    ""фраза 2""
+  ],
+  ""explanation"": ""краткое объяснение""
+}}";
+            
+            var response = await _ollama.GenerateAsync(prompt, ct);
+            
+            // Парсим JSON ответ (упрощенно - лучше использовать System.Text.Json)
+            try
+            {
+                var result = JsonSerializer.Deserialize<HallucinationResult>(response);
+                state.IsGrounded = result.is_grounded;
+                state.GroundingScore = result.confidence;
+                
+                step.Metadata["is_grounded"] = state.IsGrounded;
+                step.Metadata["confidence"] = result.confidence;
+                step.Metadata["hallucinated_parts"] = result.hallucinated_parts?.Count ?? 0;
+                
+                if (!state.IsGrounded && result.hallucinated_parts != null)
+                {
+                    step.Metadata["examples"] = string.Join("; ", result.hallucinated_parts.Take(3));
+                }
+            }
+            catch
+            {
+                // Fallback: бинарная проверка если JSON не распарсился
+                state.IsGrounded = response.Trim().ToLower().Contains("true") ||
+                                   response.Trim().ToLower().Contains("yes");
+                step.Metadata["fallback"] = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            step.Metadata["error"] = ex.Message;
+            // При ошибке считаем ответ grounded (чтобы не зациклиться)
+            state.IsGrounded = true;
+        }
+        finally
+        {
+            state.ExecutionSteps.Add(step);
+        }
+        
+        return state;
+    }
+
+    /// <summary>
+    /// Результат проверки на галлюцинацию.
+    /// </summary>
+    public class HallucinationResult
+    {
+        /// <summary>
+        /// Флаг, указывающий, основан ли ответ только на контексте.
+        /// </summary>
+        public bool is_grounded { get; set; }
+
+        /// <summary>
+        /// Уверенность в оценке.
+        /// </summary>
+        public float confidence { get; set; }
+
+        /// <summary>
+        /// Части ответа, содержащие галлюцинации.
+        /// </summary>
+        public List<string> hallucinated_parts { get; set; }
+
+        /// <summary>
+        /// Объяснение оценки.
+        /// </summary>
+        public string explanation { get; set; }
+    }
+
+    /// <summary>
+    /// Узел графа для регенерации ответа.
+    /// </summary>
+    /// <param name="state">Состояние графа.</param>
+    /// <param name="ct">Токен отмены.</param>
+    /// <returns>Обновленное состояние графа.</returns>
+    private async Task<RagState> RegenerateNodeAsync(RagState state, CancellationToken ct)
+    {
+        var step = new ExecutionStep { NodeName = "Regenerate" };
+        
+        try
+        {
+            // Сохраняем предыдущий ответ в историю
+            state.AnswerHistory.Add(state.Answer);
+            state.RegenerationCount++;
+            
+            // Формируем более строгий промпт для регенерации
+            var context = string.Join("\n\n", state.Documents
+                .Where(d => d.IsRelevant)
+                .Select(d => d.Text));
+            
+            var prompt = $@"
+Ты - ассистент, который отвечает на вопросы СТРОГО по контексту.
+Предыдущий ответ был признан содержащим выдумки (галлюцинации).
+
+ВАЖНЕЙШИЕ ПРАВИЛА:
+1. НЕ ИСПОЛЬЗУЙ СВОИ ЗНАНИЯ
+2. Отвечай ТОЛЬКО информацией из контекста
+3. Если информации нет в контексте - скажи ""В контексте нет информации""
+4. Каждое утверждение должно быть подтверждено контекстом
+5. Лучше сказать ""не знаю"", чем придумать
+
+Контекст:
+{context}
+
+Вопрос: {state.Question}
+
+Ответ (строго по контексту, без выдумок):";
+            
+            var newAnswer = await _ollama.GenerateAsync(prompt, ct);
+            state.Answer = newAnswer;
+            
+            step.Metadata["regeneration_count"] = state.RegenerationCount;
+            step.Metadata["previous_answer_length"] = state.AnswerHistory.Last().Length;
+        }
+        catch (Exception ex)
+        {
+            step.Metadata["error"] = ex.Message;
+        }
+        finally
+        {
+            state.ExecutionSteps.Add(step);
+        }
+        
+        return state;
+    }
+
+    /// <summary>
     /// Узел графа для генерации ответа.
     /// </summary>
     /// <param name="state">Состояние графа.</param>
@@ -410,9 +805,7 @@ public class RagGraphService : IRagGraphService
         
         try
         {
-            var relevantChunks = state.Documents
-                .Where(d => d.Score >= _config.Value.MinRelevanceScore)
-                .ToList();
+            var relevantChunks = state.Documents;
             
             var context = _contextFormatter.FormatContext(
                 relevantChunks, 
@@ -426,19 +819,14 @@ public class RagGraphService : IRagGraphService
             }
             
             var prompt = $@"
-Ты - ассистент, который отвечает на вопросы, используя ТОЛЬКО информацию из предоставленного контекста.
-
-ВАЖНЫЕ ПРАВИЛА:
-1. Отвечай строго на основе контекста, не используй свои знания
-2. Если в контексте нет ответа - скажи, что информации нет
-3. Ссылайся на источники в формате [Источник N]
-4. Не придумывай факты и не дополняй информацию
-5. Если информация неполная - так и скажи
-
-Контекст (документы):
+Прочти документы:
 {context}
 
-Вопрос пользователя: {state.Question}
+Ответь на вопрос пользователя: {state.Question}
+
+Ищи аналогичные слова в тексте.
+Если ответа нет, скажи.
+Не выдумывай.
 
 Ответ (только на основе контекста, с указанием источников):";
             

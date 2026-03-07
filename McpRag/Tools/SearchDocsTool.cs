@@ -24,7 +24,7 @@ public class SearchDocsTool
     [Description("Searches for relevant document chunks based on query.")]
     public async Task<string> SearchDocs(
         [Description("Search query")] string query,
-        [Description("Maximum number of results to return")] int topK = 5,
+        [Description("Maximum number of results to return")] int topK = 2,
         CancellationToken cancellationToken = default)
     {
         try
@@ -34,7 +34,7 @@ public class SearchDocsTool
             // Validate topK value
             if (topK <= 0)
             {
-                topK = 5;
+                topK = 2;
             }
 
             var count = await _vectorStore.CountAsync(cancellationToken);
@@ -43,7 +43,7 @@ public class SearchDocsTool
                 return "❌ Векторное хранилище пустое. Сначала индексируйте папку с документами.";
             }
 
-            var results = await _vectorStore.SearchAsync(query, topK, cancellationToken);
+            var results = await _vectorStore.SearchAsync(query, topK * 2, cancellationToken); // Запрашиваем больше результатов для фильтрации
             var resultsList = results.ToList();
 
             if (!resultsList.Any())
@@ -51,13 +51,21 @@ public class SearchDocsTool
                 return "❌ Не найдено релевантных документов по запросу.";
             }
 
+            // Группируем по исходному файлу и выбираем лучший чанк из каждого файла
+            var uniqueResults = resultsList
+                .GroupBy(chunk => chunk.Source) // Группируем по пути к файлу
+                .Select(group => group.OrderByDescending(chunk => chunk.Score).First()) // Выбираем чанк с наибольшей релевантностью из каждого файла
+                .OrderByDescending(chunk => chunk.Score) // Сортируем по релевантности
+                .Take(topK) // Ограничиваем количество результатов заданным topK
+                .ToList();
+
             var response = new System.Text.StringBuilder();
-            response.AppendLine($"✅ Найдено {resultsList.Count} релевантных документов:");
+            response.AppendLine($"✅ Найдено {uniqueResults.Count} релевантных документов:");
             response.AppendLine();
 
-            for (int i = 0; i < resultsList.Count; i++)
+            for (int i = 0; i < uniqueResults.Count; i++)
             {
-                var chunk = resultsList[i];
+                var chunk = uniqueResults[i];
                 var fileName = System.IO.Path.GetFileName(chunk.Source);
                 
                 response.AppendLine($"--- [Источник {i + 1}]: {fileName} (Чанк {chunk.ChunkIndex}) ---");

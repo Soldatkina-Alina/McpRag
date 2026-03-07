@@ -17,14 +17,14 @@ Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
     .MinimumLevel.Override("Microsoft.Hosting.Lifetime", LogEventLevel.Information)
     .MinimumLevel.Override("McpRag", LogEventLevel.Information)
-    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
     .WriteTo.File(
         formatter: new CompactJsonFormatter(),
         path: "logs/app-.log",
         rollingInterval: RollingInterval.Day,
-        fileSizeLimitBytes: 10 * 1024 * 1024, // 10MB
-        retainedFileCountLimit: 30,
-        rollOnFileSizeLimit: true
+        fileSizeLimitBytes: 100 * 1024 * 1024, // 100MB (увеличим размер файла)
+        retainedFileCountLimit: null, // не удалять старые логи
+        rollOnFileSizeLimit: true,
+        restrictedToMinimumLevel: LogEventLevel.Information
     )
     .Enrich.FromLogContext()
     .CreateLogger();
@@ -32,10 +32,22 @@ Log.Logger = new LoggerConfiguration()
 builder.Logging.ClearProviders();
 builder.Logging.AddSerilog(Log.Logger);
 
-// Add configuration
-builder.Services.Configure<OllamaConfig>(builder.Configuration.GetSection("Ollama"));
+// Add configuration with environment variables support
+builder.Services.Configure<OllamaConfig>(options =>
+{
+    options.BaseUrl = Environment.GetEnvironmentVariable("OLLAMA_HOST") ?? "http://localhost:11434";
+    options.Model = Environment.GetEnvironmentVariable("OLLAMA_MODEL") ?? "phi3:mini";
+    options.EmbeddingModel = Environment.GetEnvironmentVariable("OLLAMA_EMBEDDING_MODEL") ?? "nomic-embed-text";
+    if (int.TryParse(Environment.GetEnvironmentVariable("OLLAMA_TIMEOUT"), out int timeout))
+        options.TimeoutSeconds = timeout;
+});
+
+builder.Services.Configure<VectorStoreConfig>(options =>
+{
+    options.ConnectionString = Environment.GetEnvironmentVariable("CHROMADB_HOST") ?? "http://localhost:8000";
+});
+
 builder.Services.Configure<IndexerConfig>(builder.Configuration.GetSection("Indexer"));
-builder.Services.Configure<VectorStoreConfig>(builder.Configuration.GetSection("VectorStore"));
 builder.Services.Configure<RAGConfig>(builder.Configuration.GetSection("RAG"));
 
 // Add HttpClient with configuration
@@ -47,7 +59,12 @@ builder.Services.AddHttpClient<IOllamaService, OllamaService>((sp, client) =>
 });
 
 // Add vector store
-builder.Services.AddSingleton<IVectorStoreService, ChromaDbService>();
+builder.Services.AddHttpClient<IVectorStoreService, ChromaDbService>((sp, client) =>
+{
+    var config = sp.GetRequiredService<IOptions<VectorStoreConfig>>().Value;
+    client.BaseAddress = new Uri(config.ConnectionString);
+    client.Timeout = TimeSpan.FromSeconds(600); // Увеличим до 10 минут
+});
 
 // Add indexer service
 builder.Services.AddSingleton<IIndexerService, IndexerService>();
@@ -67,39 +84,14 @@ builder.Services
     .WithTools<ListFilesTool>()
     .WithTools<SearchDocsTool>()
     .WithTools<VectorStoreStatusTool>()
-    .WithTools<AskQuestionTool>();
+    .WithTools<AskQuestionTool>()
+    .WithTools<FindRelevantDocsTool>()
+    .WithTools<SummarizeDocumentTool>()
+    .WithTools<IndexStatusTool>();
 
 var host = builder.Build();
 
-var logger = host.Services.GetRequiredService<ILogger<Program>>();
-logger.LogInformation("Checking services availability...");
-
-// Check Ollama availability
-try
-{
-    var ollamaService = host.Services.GetRequiredService<IOllamaService>();
-    await ollamaService.GenerateEmbeddingsAsync("test", default);
-    logger.LogInformation("Ollama service is available");
-}
-catch (Exception ex)
-{
-    logger.LogError("Ollama service is unavailable: {Error}", ex.Message);
-    return;
-}
-
-// Check ChromaDB availability
-try
-{
-    var vectorStore = host.Services.GetRequiredService<IVectorStoreService>();
-    await vectorStore.CountAsync(default);
-    logger.LogInformation("ChromaDB service is available");
-}
-catch (Exception ex)
-{
-    logger.LogError("ChromaDB service is unavailable: {Error}", ex.Message);
-    return;
-}
-
-logger.LogInformation("All services are available. Server started");
+// Skip service availability checking to start server quietly
+// Services will be checked on first use
 
 await host.RunAsync();

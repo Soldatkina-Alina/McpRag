@@ -8,8 +8,8 @@
    [Description("Находит релевантные документы по запросу без генерации ответа")]
    public async Task<string> FindRelevantDocs(
        [Description("Поисковый запрос")] string query,
-       [Description("Количество результатов (по умолчанию 5)")] int topK = 5,
-       [Description("Минимальная релевантность (0-1)")] double? minScore = null,
+       [Description("Количество результатов (по умолчанию 2)")] int topK = 2,
+       [Description("Минимальная релевантность (0-1)")] double? minScore = 0.5,
        CancellationToken cancellationToken = default)
    {
        try
