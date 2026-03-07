@@ -1,14 +1,30 @@
 {
-  "servers": {
+  "mcpServers": {
     "McpRag": {
-      "type": "stdio",
-      "command": "dotnet",
-      "args": [
-        "run",
-        "--project",
-        "McpRag"
+      "autoApprove": [
+        "echo",
+        "check_ollama",
+        "list_files",
+        "ask_llm",
+        "index_folder",
+        "vector_store_status",
+        "clear_vector_store",
+        "search_docs",
+        "ask_question",
+        "index_status",
+        "find_relevant_docs",
+        "summarize_document"
       ],
-      "timeout": 600
+      "disabled": false,
+      "timeout": 6000,
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "exec",
+        "-i",
+        "server",
+        "dotnet", "McpRag.dll"
+      ]
     }
   }
 }
