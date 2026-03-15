@@ -15,7 +15,8 @@ AVAILABLE_MODELS=$(curl -s http://ollama:11434/api/tags | grep -o '"name":"[^"]*
 
 # Required models
 REQUIRED_MODELS="qwen2.5:7b
-nomic-embed-text"
+nomic-embed-text
+phi3:mini"
 
 # Pull missing models
 for model in $REQUIRED_MODELS; do
